@@ -46,14 +46,16 @@ the chain instead).
   `/ingest/run`, `/backtest`. Global JSON-logging exception handler. Swagger at `/docs`.
 - **Scheduler:** APScheduler daily ingest (13:00 UTC default), wired into lifespan.
 - **Migrations:** `0004_warehouse` no-op baseline + `0005_forecasts_backtests`
-  (forecasts, backtests tables, RLS enabled). **Not yet applied to Supabase.**
+  (forecasts, backtests tables, RLS enabled). **Applied to Supabase 2026-07-06**
+  (via Supabase MCP; `alembic_version` stamped to `0005_forecasts_backtests`).
 - **Quality:** 38 tests green (incl. Nautilus e2e), ruff clean, mypy clean, GitHub
   Actions CI (ruff→mypy→fast tests→docker build), Dockerfile + docker-compose.
 
 ## Pending / next tasks
 
-1. **Apply migration 0005 to Supabase** and run end-to-end verification
-   (needs `DATABASE_URL` with DB password in `.env` — ask owner).
+1. **Runtime verification against Supabase** — ingest real OHLCV and exercise
+   forecast/backtest endpoints (needs `DATABASE_URL` with DB password in `.env`,
+   which only the owner can provide).
 2. **Vendor Kronos source** into `app/ml/kronos_src/` (owner approval needed; then
    `model=kronos` works; add a marked-slow smoke test).
 3. **Phase 2:** multi-agent system (TradingAgents-inspired), RAG memory on
