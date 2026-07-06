@@ -7,7 +7,7 @@ market data, computes technical indicators, forecasts prices with the
 strategies on [NautilusTrader](https://nautilustrader.io). **No real trading** —
 simulation and analytics only.
 
-## Status: Phase 1 (backend core)
+## Status: Phase 2 (multi-agent system) complete
 
 | Capability | State |
 |---|---|
@@ -17,7 +17,19 @@ simulation and analytics only.
 | Forecasting — Kronos (NeoQuasar/Kronos-small) | ⚠️ adapter ready; vendor `app/ml/kronos_src/` to enable |
 | Backtesting — NautilusTrader 1.230 + simple vectorized engine | ✅ |
 | Daily scheduler (APScheduler) | ✅ |
-| Multi-agent system, RAG memory, chat UI, frontend | Phase 2–3 (not started) |
+| LLM layer — Gemini primary + OpenAI fallback + fake (tests) | ✅ (Gemini live-verified) |
+| News/sentiment feed (NewsAPI) | ✅ (live-verified) |
+| Multi-agent pipeline (analysts → debate → trader → risk → PM) | ✅ |
+| Semantic memory (MiniLM 384 + pgvector `agent_embeddings`) | ✅ |
+| Chat UI, dashboard frontend | Phase 3 (not started) |
+
+### Agents API
+
+`POST /agents/run {"symbol": "RELIANCE"}` → `202` with a run id; the pipeline
+executes in the background (typically 7 LLM calls). Poll `GET /agents/runs/{id}`
+until `completed`, then read the full transcript at
+`GET /agents/runs/{id}/messages`. Every decision passes coded risk limits
+(position-size cap, drawdown veto) that the LLMs cannot loosen.
 
 ## Architecture
 

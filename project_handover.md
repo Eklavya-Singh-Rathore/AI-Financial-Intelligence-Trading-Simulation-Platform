@@ -1,7 +1,7 @@
 # project_handover.md
 
 > Living status document. Update at every sprint / significant change.
-> Last updated: **2026-07-06** (Phase 1 backend implemented)
+> Last updated: **2026-07-07** (Phase 2 multi-agent system implemented)
 
 ## Project Overview
 
@@ -51,16 +51,47 @@ the chain instead).
 - **Quality:** 38 tests green (incl. Nautilus e2e), ruff clean, mypy clean, GitHub
   Actions CI (ruff→mypy→fast tests→docker build), Dockerfile + docker-compose.
 
+## Completed (Phase 2, 2026-07-07) — multi-agent system
+
+- **LLM layer (`app/llm/`):** provider abstraction with **Gemini primary**
+  (`gemini-2.5-flash`, google-genai SDK) and **OpenAI fallback** (`gpt-4o-mini`),
+  plus a deterministic `FakeLLMClient` for tests. `FailoverLLMClient` retries the
+  primary once then falls back. JSON-schema-constrained outputs, token usage +
+  latency logged per call. **Live-verified:** Gemini answers correctly (~1.7 s);
+  the doc's **OpenAI key has NO quota (429)** — fallback is dead until a funded
+  key is supplied (failover logic itself is unit-tested).
+- **News (`services/news.py`):** NewsAPI headlines per instrument, graceful
+  degradation. **Live-verified** (5 headlines for Reliance Industries).
+- **Agents (`app/agents/`):** TradingAgents-inspired custom pipeline —
+  gather (prices/indicators/forecast/backtest/news/memory, all deterministic) →
+  technical analyst → news analyst → bull/bear debate (configurable rounds) →
+  trader → risk manager → portfolio manager. All outputs are pydantic-validated
+  JSON. **Coded hard limits** (`agents/risk.py:apply_hard_limits`) bind every LLM
+  decision: size cap `MAX_POSITION_PCT`, drawdown veto, LLM can only shrink sizes.
+- **Memory:** local MiniLM embeddings (384-dim, matches pre-existing
+  `agent_embeddings` table) via sentence-transformers; key reports embedded after
+  each run; top-k recall injected into the next run's context. Degrades to
+  memory-off when the model is unavailable.
+- **API:** `POST /agents/run` (202 + background execution), `GET /agents/runs`,
+  `GET /agents/runs/{id}`, `GET /agents/runs/{id}/messages`.
+- **DB:** migration `0006_agent_runs` (agent_runs, agent_messages; RLS enabled)
+  **applied to Supabase**, `alembic_version = 0006_agent_runs`.
+- **Quality:** 70 fast tests green (agents pipeline with scripted FakeLLM,
+  failover, hard limits, news parsing, LLM JSON parsing), ruff + mypy clean.
+
 ## Pending / next tasks
 
-1. **Runtime verification against Supabase** — ingest real OHLCV and exercise
-   forecast/backtest endpoints (needs `DATABASE_URL` with DB password in `.env`,
-   which only the owner can provide).
-2. **Vendor Kronos source** into `app/ml/kronos_src/` (owner approval needed; then
-   `model=kronos` works; add a marked-slow smoke test).
-3. **Phase 2:** multi-agent system (TradingAgents-inspired), RAG memory on
-   `agent_embeddings`, news/sentiment ingestion.
-4. **Phase 3:** Next.js dashboard + chat interface (Vercel), auth.
+1. **Runtime verification against Supabase** — ingest real OHLCV, then run the
+   full agent pipeline end-to-end (needs `DATABASE_URL` with DB password in
+   `.env`, which only the owner can provide — the research doc has a placeholder).
+2. **Vendor Kronos source** into `app/ml/kronos_src/` — **twice blocked** by the
+   permission classifier (untrusted external code). Owner must either copy
+   `model/{__init__,kronos,module}.py` + LICENSE from shiyu-coder/Kronos manually
+   or add a Bash permission rule and ask again. Baseline forecaster active
+   meanwhile.
+3. **OpenAI fallback key** — current key has no quota (429 insufficient_quota);
+   supply a funded key if a working fallback is wanted.
+4. **Phase 3:** Next.js dashboard + chat interface (Vercel), auth, alerts.
 5. **Deployment:** backend needs a container host (Fly/Render/Cloud Run/ECS) —
    it does not fit Vercel serverless (torch + nautilus + scheduler).
 
@@ -76,10 +107,14 @@ the chain instead).
 
 ## Configuration
 
-`.env` at repo root (see `.env.example`): `DATABASE_URL` (Supabase, asyncpg),
+`.env` at repo root (see `.env.example`): `DATABASE_URL` (Supabase, asyncpg —
+STILL EMPTY, owner must fill), `LLM_PROVIDER=gemini` + `GOOGLE_AI_STUDIO_API_KEY`,
+`LLM_FALLBACK_PROVIDER=openai` + `OPENAI_API_KEY`, `NEWSAPI_KEY`,
 `KRONOS_MODEL_ID`/`KRONOS_TOKENIZER_ID`/`KRONOS_DEVICE`, `ENABLE_SCHEDULER`,
-`DAILY_INGEST_HOUR/MINUTE`, optional `HF_TOKEN`. Phase-2 keys (`OPENAI_API_KEY`,
-`ANTHROPIC_API_KEY`) are placeholders only.
+`DAILY_INGEST_HOUR/MINUTE`, agent knobs (`AGENTS_DEBATE_ROUNDS`,
+`MAX_POSITION_PCT`, `RISK_MAX_DRAWDOWN_VETO_PCT`, `ENABLE_AGENT_MEMORY`).
+Dev keys are the ones from the research doc (owner-authorized for development);
+**rotate every key before deployment**.
 
 ## Conventions
 

@@ -49,9 +49,28 @@ class Settings(BaseSettings):
     # --- Forecasting defaults ---
     default_forecaster: str = "kronos"
 
-    # --- Phase 2+ placeholders (unused in Phase 1) ---
+    # --- LLM providers (Phase 2 agents) ---
+    llm_provider: str = "gemini"  # gemini | openai | fake
+    llm_fallback_provider: str | None = "openai"
+    google_ai_studio_api_key: str | None = None
+    gemini_model: str = "gemini-2.5-flash"
     openai_api_key: str | None = None
+    openai_model: str = "gpt-4o-mini"
     anthropic_api_key: str | None = None
+    llm_timeout_seconds: float = 90.0
+
+    # --- News (Phase 2) ---
+    newsapi_key: str | None = None
+    news_lookback_days: int = 7
+    news_max_headlines: int = 12
+
+    # --- Agents (Phase 2) ---
+    agents_debate_rounds: int = 1
+    max_position_pct: float = 10.0
+    risk_max_drawdown_veto_pct: float = 40.0
+    enable_agent_memory: bool = True
+    embedding_model_id: str = "sentence-transformers/all-MiniLM-L6-v2"
+    agent_memory_top_k: int = 3
 
     @property
     def async_database_url(self) -> str:

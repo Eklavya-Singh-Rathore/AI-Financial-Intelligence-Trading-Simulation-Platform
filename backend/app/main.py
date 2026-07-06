@@ -12,7 +12,7 @@ import structlog
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from app.api.routers import backtest, health, ingest, instruments
+from app.api.routers import agents, backtest, health, ingest, instruments
 from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.db.base import dispose_engine
@@ -51,6 +51,7 @@ app.include_router(health.router)
 app.include_router(instruments.router)
 app.include_router(ingest.router)
 app.include_router(backtest.router)
+app.include_router(agents.router)
 
 
 @app.exception_handler(Exception)

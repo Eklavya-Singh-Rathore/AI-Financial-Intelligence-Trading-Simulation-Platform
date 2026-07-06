@@ -41,8 +41,18 @@ def test_openapi_lists_all_endpoints(client):
         "/instruments/{symbol}/forecast",
         "/backtest",
         "/ingest/run",
+        "/agents/run",
+        "/agents/runs",
+        "/agents/runs/{run_id}",
+        "/agents/runs/{run_id}/messages",
     }
     assert expected <= set(paths)
+
+
+def test_agents_run_body_validation(client):
+    # debate_rounds out of range must 422 before any DB access
+    r = client.post("/agents/run", json={"symbol": "RELIANCE", "debate_rounds": 9})
+    assert r.status_code == 422
 
 
 def test_forecast_horizon_validation(client):
