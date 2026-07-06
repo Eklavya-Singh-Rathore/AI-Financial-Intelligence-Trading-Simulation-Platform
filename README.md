@@ -1,0 +1,116 @@
+# AI Financial Intelligence Platform
+
+AI-driven **decision-support** system for a fixed 16-asset Indian-market universe
+(NIFTY 50, Sensex, gold/silver ETFs, and 12 blue-chip NSE stocks). It ingests
+market data, computes technical indicators, forecasts prices with the
+[Kronos](https://github.com/shiyu-coder/Kronos) foundation model, and backtests
+strategies on [NautilusTrader](https://nautilustrader.io). **No real trading** —
+simulation and analytics only.
+
+## Status: Phase 1 (backend core)
+
+| Capability | State |
+|---|---|
+| OHLCV ingestion (yfinance → Supabase `price_bars`) | ✅ |
+| Technical indicators (SMA/EMA/RSI/MACD/Bollinger) | ✅ |
+| Forecasting — baseline drift model | ✅ |
+| Forecasting — Kronos (NeoQuasar/Kronos-small) | ⚠️ adapter ready; vendor `app/ml/kronos_src/` to enable |
+| Backtesting — NautilusTrader 1.230 + simple vectorized engine | ✅ |
+| Daily scheduler (APScheduler) | ✅ |
+| Multi-agent system, RAG memory, chat UI, frontend | Phase 2–3 (not started) |
+
+## Architecture
+
+Modular monolith: FastAPI backend (this repo, `backend/`) + Supabase Postgres
+(pre-existing schema: `instruments`, `price_bars`, `data_providers`,
+`instrument_provider_mappings`, pgvector). This project **adopts** that schema —
+Alembic continues from the existing head (`0004_warehouse`) and adds only
+`forecasts` and `backtests` (revision `0005_forecasts_backtests`).
+
+```
+backend/app/
+├── api/routers/     # health, instruments (prices/indicators/forecast), ingest, backtest
+├── core/            # settings (pydantic-settings), structlog config, domain constants
+├── db/              # async SQLAlchemy engine/session
+├── models/          # ORM: existing tables (read) + forecasts/backtests (owned)
+├── services/        # market_data, data_ingest, indicators, forecast/backtest orchestration
+├── ml/              # Forecaster interface, baseline + Kronos adapters, registry
+├── backtesting/     # Backtester interface, NautilusTrader + simple engines, strategies
+└── scheduler/       # APScheduler daily ingest job
+```
+
+## Getting started
+
+Requirements: Python 3.12+, a Supabase (or Postgres 15+) database with the
+pre-existing market-data schema.
+
+```bash
+cd backend
+python -m venv .venv && .venv/Scripts/activate    # Windows; use bin/activate on Unix
+pip install -e ".[dev]"
+
+# configure
+cp ../.env.example ../.env                        # then fill in DATABASE_URL
+
+# migrate (adds forecasts/backtests to the existing schema)
+alembic upgrade head
+
+# run
+uvicorn app.main:app --reload                     # Swagger at http://localhost:8000/docs
+```
+
+### Key endpoints
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /health` | liveness + DB connectivity |
+| `GET /instruments` | the 16-asset universe |
+| `POST /ingest/run` | fetch & upsert OHLCV (idempotent) |
+| `GET /instruments/{symbol}/prices` | stored OHLCV |
+| `GET /instruments/{symbol}/indicators?names=sma,rsi` | computed indicators |
+| `GET /instruments/{symbol}/forecast?horizon=5&model=kronos` | price forecast |
+| `POST /backtest` | run SMA-crossover backtest (nautilus or simple engine) |
+
+Symbols are the internal registry symbols (e.g. `RELIANCE`, `NIFTY50`, `GOLD`) —
+provider tickers like `RELIANCE.NS` are resolved via `instrument_provider_mappings`.
+
+### Enabling the Kronos forecaster
+
+The Kronos runtime classes are not on PyPI. Copy `model/__init__.py`,
+`model/kronos.py`, `model/module.py` (and LICENSE) from
+[shiyu-coder/Kronos](https://github.com/shiyu-coder/Kronos) (MIT) into
+`backend/app/ml/kronos_src/`. Weights download automatically from Hugging Face
+(`NeoQuasar/Kronos-small` + `NeoQuasar/Kronos-Tokenizer-base`) on first use.
+Until then, `model=baseline` works and `model=kronos` returns a clear 503.
+
+## Development
+
+```bash
+pytest -m "not slow" -q      # fast suite (no model downloads / heavy engines)
+pytest -q                    # full suite incl. NautilusTrader end-to-end
+ruff check app tests
+mypy app
+```
+
+CI (GitHub Actions) runs ruff → mypy → fast tests → Docker build on every push/PR.
+
+### Local Postgres (optional)
+
+`infrastructure/docker-compose.yml` provides pgvector Postgres + the backend.
+Note: the base market-data schema is owned by earlier migrations that live in the
+prior repository, so a fresh local DB needs a one-time schema load, e.g.
+`pg_dump --schema-only` from Supabase, before `alembic upgrade head` applies the
+`forecasts`/`backtests` tables on top. Day-to-day development targets Supabase.
+
+## Security
+
+- All secrets come from `.env` (git-ignored). See `.env.example` for the keys.
+- **Never commit API keys.** Keys previously exposed in planning documents must
+  be treated as compromised and rotated.
+- The database has RLS enabled deny-by-default; the backend connects as the
+  owner role.
+
+## Documents
+
+- `deep-research-report (1).md` — original planning/research document
+- `project_handover.md` — living status/handover document (kept current)
