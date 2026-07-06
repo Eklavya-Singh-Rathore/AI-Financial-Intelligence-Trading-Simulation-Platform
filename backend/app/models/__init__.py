@@ -6,6 +6,7 @@ instrument_provider_mappings) are mapped read/mixed; forecasts and backtests are
 new tables owned by this project.
 """
 
+from app.models.agent_run import AgentEmbedding, AgentMessage, AgentRun
 from app.models.backtest import Backtest
 from app.models.forecast import Forecast
 from app.models.instrument import Instrument
@@ -19,4 +20,7 @@ __all__ = [
     "InstrumentProviderMapping",
     "Forecast",
     "Backtest",
+    "AgentRun",
+    "AgentMessage",
+    "AgentEmbedding",
 ]
