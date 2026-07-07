@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  /* validated light palette (dataviz): gain/loss/accent on white */
+  --gain: #059669;
+  --loss: #dc2626;
+  --accent: #2563eb;
+  --surface: #ffffff;
+  --surface-2: #f8fafc;
+  --border: #e2e8f0;
+  --ink: #0f172a;
+  --ink-2: #475569;
+  --ink-3: #94a3b8;
+}
+
+.dark {
+  /* validated dark palette (dataviz): on slate-900 */
+  --gain: #059669;
+  --loss: #ef4444;
+  --accent: #3b82f6;
+  --surface: #0f172a;
+  --surface-2: #1e293b;
+  --border: #334155;
+  --ink: #f1f5f9;
+  --ink-2: #94a3b8;
+  --ink-3: #64748b;
+}
+
+@theme inline {
+  --color-gain: var(--gain);
+  --color-loss: var(--loss);
+  --color-accent: var(--accent);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--border);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+}
+
+html, body {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.tabular { font-variant-numeric: tabular-nums; }
