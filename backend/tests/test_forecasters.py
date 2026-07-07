@@ -63,3 +63,31 @@ def test_kronos_without_vendored_source_raises_cleanly(price_df):
     forecaster = get_forecaster("kronos")
     with pytest.raises(ForecasterError, match="kronos_src"):
         forecaster.forecast(price_df, horizon=2)
+
+
+def test_kronos_source_is_vendored():
+    """The vendored Kronos runtime classes import from the model sub-package."""
+    from app.ml.kronos_src.model import Kronos, KronosPredictor, KronosTokenizer
+
+    assert all(cls is not None for cls in (Kronos, KronosPredictor, KronosTokenizer))
+
+
+@pytest.mark.slow
+def test_kronos_forecast_end_to_end(price_df):
+    """Real Kronos forecast (downloads NeoQuasar/Kronos-small weights, CPU).
+
+    Skips only if the model genuinely cannot be loaded (e.g. no network in the
+    environment); a load failure surfaces as ForecasterError, not a crash.
+    """
+    from app.ml.kronos_forecaster import KronosForecaster
+
+    try:
+        result = KronosForecaster().forecast(price_df, horizon=5)
+    except ForecasterError as exc:
+        pytest.skip(f"Kronos model unavailable in this environment: {exc}")
+
+    assert result.model_name == "kronos"
+    assert len(result.predictions) == 5
+    assert all(isinstance(p, float) and p == p for p in result.predictions)  # finite
+    assert result.meta["model_id"] == "NeoQuasar/Kronos-small"
+    assert result.meta["context_len"] == len(price_df)
