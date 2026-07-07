@@ -30,8 +30,20 @@ class Settings(BaseSettings):
     env: str = "development"
     log_level: str = "INFO"
 
+    # --- API security (Phase 2.5 hardening) ---
+    # When api_key is set, every route except /live, /health, /docs, /openapi.json
+    # requires the X-API-Key header. Empty = auth disabled (development only).
+    api_key: str = ""
+    rate_limit_per_minute: int = 120
+    cors_origins: str = ""  # comma-separated origins; empty = CORS disabled
+    expose_error_details: bool = False  # include internal error text in API responses
+
     # --- Database ---
     database_url: str = ""
+    # asyncpg prepared-statement cache size. None = auto: disabled (0) when the
+    # URL looks like a PgBouncer/Supabase pooler (transaction mode breaks named
+    # prepared statements), default cache otherwise.
+    db_statement_cache_size: int | None = None
 
     # --- Hugging Face / Kronos ---
     hf_token: str | None = None
@@ -71,6 +83,12 @@ class Settings(BaseSettings):
     enable_agent_memory: bool = True
     embedding_model_id: str = "sentence-transformers/all-MiniLM-L6-v2"
     agent_memory_top_k: int = 3
+
+    # --- Agent execution hardening (Phase 2.5) ---
+    max_concurrent_agent_runs: int = 2
+    agent_run_timeout_seconds: float = 600.0
+    agent_run_stale_minutes: int = 30  # startup sweep marks older running runs failed
+    memory_ttl_days: int = 90  # embeddings older than this are purged
 
     @property
     def async_database_url(self) -> str:

@@ -1,0 +1,17 @@
+# Keep the build context lean and the image free of local state (audit HIGH-8).
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+.coverage
+htmlcov/
+tests/
+Dockerfile
+.dockerignore
+.env
+.env.*
+*.log

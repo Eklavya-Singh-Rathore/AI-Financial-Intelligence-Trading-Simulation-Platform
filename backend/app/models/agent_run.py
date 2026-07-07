@@ -32,6 +32,9 @@ class AgentRun(Base):
     symbol: Mapped[str] = mapped_column(String(32), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="pending")
     trigger: Mapped[str] = mapped_column(String(16), nullable=False, server_default="api")
+    # Client-supplied Idempotency-Key: repeated POSTs with the same key return
+    # the same run instead of spawning (and paying for) a duplicate pipeline.
+    idempotency_key: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
     llm_provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
     debate_rounds: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
     final_decision: Mapped[dict | None] = mapped_column(JSONB, nullable=True)

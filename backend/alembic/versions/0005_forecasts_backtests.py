@@ -25,6 +25,21 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    # Precondition guard (audit MED-8): this chain ASSUMES the pre-existing
+    # base schema (instruments, price_bars, ...) owned by the prior repository.
+    # On a fresh database, load scripts/base_schema.sql first - otherwise the
+    # FK below fails with a confusing error.
+    bind = op.get_bind()
+    exists = bind.execute(
+        sa.text("SELECT to_regclass('public.instruments') IS NOT NULL")
+    ).scalar()
+    if not exists:
+        raise RuntimeError(
+            "Base table 'instruments' is missing. This migration chain extends a "
+            "pre-existing schema; bootstrap a fresh database with "
+            "scripts/base_schema.sql before running 'alembic upgrade head'."
+        )
+
     op.create_table(
         "forecasts",
         sa.Column(

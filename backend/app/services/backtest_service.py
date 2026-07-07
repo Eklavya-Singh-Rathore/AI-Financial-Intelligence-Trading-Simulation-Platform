@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from datetime import date
 
@@ -59,7 +60,8 @@ async def run_backtest(
         end=end,
     )
     backtester = get_backtester(engine)
-    result = backtester.run(df, config)
+    # CPU-bound engine work must not block the event loop (audit CRIT-2).
+    result = await asyncio.to_thread(backtester.run, df, config)
 
     actual_start = df.index[0].date()
     actual_end = df.index[-1].date()

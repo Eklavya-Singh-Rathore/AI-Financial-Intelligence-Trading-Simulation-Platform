@@ -28,7 +28,7 @@ async def run_backtest(
             start=body.start,
             end=body.end,
             initial_cash=body.initial_cash,
-            params=body.params,
+            params=body.params.model_dump(),
         )
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

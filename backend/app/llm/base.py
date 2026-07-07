@@ -18,9 +18,35 @@ from dataclasses import dataclass, field
 
 Message = dict[str, str]  # {"role": "user"|"assistant", "content": str}
 
+# Error-message fragments that indicate retrying the same provider is pointless
+# (bad credentials, exhausted quota, malformed request).
+_NON_RETRYABLE_MARKERS = (
+    "insufficient_quota",
+    "invalid api key",
+    "api key not valid",
+    "api_key",
+    "permission",
+    "unauthorized",
+    "401",
+    "403",
+    "400",
+)
+
 
 class LLMError(RuntimeError):
-    """Raised when a provider cannot produce a completion."""
+    """Raised when a provider cannot produce a completion.
+
+    ``retryable=False`` marks failures where retrying the same provider cannot
+    help (auth/quota/bad request); failover should skip straight to the
+    fallback provider.
+    """
+
+    def __init__(self, message: str, *, retryable: bool | None = None) -> None:
+        super().__init__(message)
+        if retryable is None:
+            lowered = message.lower()
+            retryable = not any(marker in lowered for marker in _NON_RETRYABLE_MARKERS)
+        self.retryable = retryable
 
 
 @dataclass

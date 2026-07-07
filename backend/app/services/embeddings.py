@@ -4,22 +4,27 @@ Uses ``all-MiniLM-L6-v2`` (384 dims - matches the pre-existing
 ``agent_embeddings.embedding vector(384)`` column). The model loads lazily on
 first use (~80 MB download once, cached by HF). All failures degrade to
 "memory off" behaviour: agents run fine without memory.
+
+Async correctness (audit CRIT-2): model load and ``encode`` are CPU-bound and
+always executed via ``asyncio.to_thread`` from the async entry points here.
 """
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import threading
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import String, cast, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.models.agent_run import AgentEmbedding
+from app.models.agent_run import AgentEmbedding, AgentMessage, AgentRun
 
 log = structlog.get_logger(__name__)
 
@@ -47,7 +52,10 @@ def _get_model() -> Any | None:
 
 
 def embed_texts(texts: list[str]) -> list[list[float]] | None:
-    """Embed texts; None when the model is unavailable (memory disabled)."""
+    """Embed texts (BLOCKING - call via asyncio.to_thread from async code).
+
+    Returns None when the model is unavailable (memory disabled).
+    """
     if not texts:
         return None
     model = _get_model()
@@ -55,6 +63,13 @@ def embed_texts(texts: list[str]) -> list[list[float]] | None:
         return None
     vectors = model.encode(texts, normalize_embeddings=True, show_progress_bar=False)
     return [v.tolist() for v in vectors]
+
+
+async def embed_texts_async(texts: list[str]) -> list[list[float]] | None:
+    """Async wrapper keeping encode/model-load off the event loop."""
+    if not texts:
+        return None
+    return await asyncio.to_thread(embed_texts, texts)
 
 
 def content_hash(text: str) -> str:
@@ -79,7 +94,7 @@ async def store_embedding(
     True when a row was written."""
     if not get_settings().enable_agent_memory:
         return False
-    vectors = embed_texts([text])
+    vectors = await embed_texts_async([text])
     if vectors is None:
         return False
     digest = content_hash(text)
@@ -110,13 +125,19 @@ async def search_memory(
     query_text: str,
     *,
     source_table: str | None = None,
+    symbol: str | None = None,
     top_k: int | None = None,
 ) -> list[MemoryHit]:
-    """Cosine-distance search over stored embeddings; [] when memory is off."""
+    """Cosine-distance search over stored embeddings; [] when memory is off.
+
+    When ``symbol`` is given, results are restricted to agent messages
+    belonging to that instrument's runs (audit LOW-2: no cross-symbol
+    contamination).
+    """
     settings = get_settings()
     if not settings.enable_agent_memory:
         return []
-    vectors = embed_texts([query_text])
+    vectors = await embed_texts_async([query_text])
     if vectors is None:
         return []
     top_k = top_k or settings.agent_memory_top_k
@@ -127,6 +148,17 @@ async def search_memory(
     )
     if source_table:
         stmt = stmt.where(AgentEmbedding.source_table == source_table)
+    if symbol:
+        # Restrict to embeddings whose source message belongs to this symbol.
+        symbol_msg_ids = (
+            select(cast(AgentMessage.id, String))
+            .join(AgentRun, AgentRun.id == AgentMessage.run_id)
+            .where(AgentRun.symbol == symbol)
+        )
+        stmt = stmt.where(
+            AgentEmbedding.source_table == "agent_messages",
+            AgentEmbedding.source_id.in_(symbol_msg_ids),
+        )
     stmt = stmt.order_by(distance).limit(top_k)
 
     result = await session.execute(stmt)
@@ -138,3 +170,19 @@ async def search_memory(
         )
         for row in result
     ]
+
+
+async def purge_expired_embeddings(session: AsyncSession) -> int:
+    """Delete embeddings older than the configured TTL. Returns rows removed."""
+    ttl_days = get_settings().memory_ttl_days
+    if ttl_days <= 0:
+        return 0
+    cutoff = datetime.now(UTC) - timedelta(days=ttl_days)
+    result = await session.execute(
+        delete(AgentEmbedding).where(AgentEmbedding.created_at < cutoff)
+    )
+    await session.commit()
+    removed = getattr(result, "rowcount", 0) or 0
+    if removed:
+        log.info("memory_purged", removed=removed, ttl_days=ttl_days)
+    return removed

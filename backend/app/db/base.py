@@ -28,6 +28,28 @@ _engine: AsyncEngine | None = None
 _sessionmaker: async_sessionmaker[AsyncSession] | None = None
 
 
+def _looks_like_pooler(url: str) -> bool:
+    """Heuristic: Supabase/PgBouncer transaction-mode pooler endpoints."""
+    lowered = url.lower()
+    return ":6543" in lowered or "pooler." in lowered or "pgbouncer" in lowered
+
+
+def _connect_args(url: str) -> dict:
+    """asyncpg connect args, pooler-safe (audit HIGH-6).
+
+    PgBouncer in transaction mode breaks asyncpg's named prepared statements;
+    disable the statement cache automatically for pooler-looking URLs, or
+    explicitly via DB_STATEMENT_CACHE_SIZE.
+    """
+    settings = get_settings()
+    size = settings.db_statement_cache_size
+    if size is None:
+        size = 0 if _looks_like_pooler(url) else None
+    if size is None:
+        return {}
+    return {"statement_cache_size": size}
+
+
 def get_engine() -> AsyncEngine:
     """Return the process-wide async engine, creating it on first use."""
     global _engine, _sessionmaker
@@ -37,10 +59,12 @@ def get_engine() -> AsyncEngine:
             raise RuntimeError(
                 "DATABASE_URL is not configured. Copy .env.example to .env and set it."
             )
+        url = settings.async_database_url
         _engine = create_async_engine(
-            settings.async_database_url,
+            url,
             pool_pre_ping=True,
             future=True,
+            connect_args=_connect_args(url),
         )
         _sessionmaker = async_sessionmaker(
             _engine, expire_on_commit=False, class_=AsyncSession

@@ -44,10 +44,18 @@ async def get_prices(
     symbol: str,
     start: date | None = Query(default=None),
     end: date | None = Query(default=None),
+    limit: int = Query(
+        default=10_000,
+        ge=1,
+        le=50_000,
+        description="Maximum bars returned (most recent kept).",
+    ),
     session: AsyncSession = Depends(get_session),
 ) -> PriceSeriesOut:
     instrument = await _get_instrument_or_404(session, symbol)
     bars = await market_data.get_price_bars(session, instrument.id, start=start, end=end)
+    if len(bars) > limit:
+        bars = bars[-limit:]
     out = [
         PriceBarOut(
             date=b.date,

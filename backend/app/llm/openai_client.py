@@ -45,26 +45,27 @@ class OpenAIClient(LLMClient):
             kwargs["response_format"] = {"type": "json_object"}
 
         started = time.perf_counter()
+        # Entire interaction normalized to LLMError so failover sees one
+        # exception type (HIGH-1); .choices access can raise like the call.
         try:
             response = self._client.chat.completions.create(
                 model=self.model, messages=chat_messages, **kwargs
             )
+            text = (response.choices[0].message.content or "") if response.choices else ""
+            if not text.strip():
+                raise LLMError("openai returned an empty response")
+            usage: dict[str, int] = {}
+            if response.usage is not None:
+                usage = {
+                    "input_tokens": int(response.usage.prompt_tokens or 0),
+                    "output_tokens": int(response.usage.completion_tokens or 0),
+                }
+            parsed = parse_json_text(text) if json_schema else None
+        except LLMError:
+            raise
         except Exception as exc:  # noqa: BLE001 - normalize provider errors
             raise LLMError(f"openai request failed: {exc}") from exc
         latency_ms = int((time.perf_counter() - started) * 1000)
-
-        text = (response.choices[0].message.content or "") if response.choices else ""
-        if not text.strip():
-            raise LLMError("openai returned an empty response")
-
-        usage: dict[str, int] = {}
-        if response.usage is not None:
-            usage = {
-                "input_tokens": int(response.usage.prompt_tokens or 0),
-                "output_tokens": int(response.usage.completion_tokens or 0),
-            }
-
-        parsed = parse_json_text(text) if json_schema else None
         log.info(
             "llm_call", provider=self.provider, model=self.model,
             latency_ms=latency_ms, **usage,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from datetime import date
 
@@ -42,7 +43,8 @@ async def run_forecast(
         raise ForecasterError(f"no price history for '{symbol}'; ingest data first")
 
     forecaster = get_forecaster(model_name)
-    result = forecaster.forecast(df, horizon)
+    # Model load/inference is CPU-bound; keep it off the event loop (CRIT-2).
+    result = await asyncio.to_thread(forecaster.forecast, df, horizon)
 
     last_date = pd.to_datetime(df.index[-1])
     target_dates = [

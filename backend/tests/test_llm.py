@@ -63,7 +63,8 @@ def test_fake_schema_default_is_valid():
 
 # --- Failover -----------------------------------------------------------------
 
-def test_failover_uses_fallback_after_primary_fails_twice():
+def test_failover_uses_fallback_after_primary_fails_twice(monkeypatch):
+    monkeypatch.setattr("app.llm.registry.time.sleep", lambda _s: None)
     primary = FakeLLMClient(fail_times=2)
     primary.provider = "gemini"
     fallback = FakeLLMClient(responses=['{"ok": true}'])
@@ -75,7 +76,8 @@ def test_failover_uses_fallback_after_primary_fails_twice():
     assert len(primary.calls) == 2  # one attempt + one retry
 
 
-def test_primary_retry_succeeds_without_fallback_call():
+def test_primary_retry_succeeds_without_fallback_call(monkeypatch):
+    monkeypatch.setattr("app.llm.registry.time.sleep", lambda _s: None)
     primary = FakeLLMClient(fail_times=1, responses=['{"ok": 1}'])
     fallback = FakeLLMClient()
     client = FailoverLLMClient(primary, fallback)
@@ -84,11 +86,56 @@ def test_primary_retry_succeeds_without_fallback_call():
     assert len(fallback.calls) == 0
 
 
-def test_failover_raises_when_no_fallback():
+def test_failover_raises_when_no_fallback(monkeypatch):
+    monkeypatch.setattr("app.llm.registry.time.sleep", lambda _s: None)
     primary = FakeLLMClient(fail_times=2)
     client = FailoverLLMClient(primary, None)
     with pytest.raises(LLMError):
         client.complete("s", [{"role": "user", "content": "m"}])
+
+
+# --- Phase 2.5: error classification + failover coverage ------------------------
+
+def test_llm_error_classification():
+    assert LLMError("HTTP 500 upstream broke").retryable is True
+    assert LLMError("rate limited, please slow down").retryable is True
+    assert LLMError("Error 429: insufficient_quota, check billing").retryable is False
+    assert LLMError("401 unauthorized").retryable is False
+    assert LLMError("API key not valid").retryable is False
+    assert LLMError("anything", retryable=True).retryable is True
+
+
+def test_non_retryable_error_skips_retry_and_fails_over(monkeypatch):
+    monkeypatch.setattr("app.llm.registry.time.sleep", lambda _s: None)
+
+    class QuotaDead(FakeLLMClient):
+        def complete(self, system, messages, json_schema=None):
+            self.calls.append(None)
+            raise LLMError("429 insufficient_quota")
+
+    primary = QuotaDead()
+    primary.provider = "openai"
+    fallback = FakeLLMClient(responses=['{"ok": 2}'])
+    client = FailoverLLMClient(primary, fallback)
+    r = client.complete("s", [{"role": "user", "content": "m"}], {"type": "object"})
+    assert r.parsed == {"ok": 2}
+    assert len(primary.calls) == 1  # NO second attempt on non-retryable
+
+
+def test_foreign_exceptions_are_normalized_and_fail_over(monkeypatch):
+    """HIGH-1: a ValueError from a provider must still reach the fallback."""
+    monkeypatch.setattr("app.llm.registry.time.sleep", lambda _s: None)
+
+    class Weird(FakeLLMClient):
+        def complete(self, system, messages, json_schema=None):
+            raise ValueError("response has no parts")
+
+    primary = Weird()
+    primary.provider = "gemini"
+    fallback = FakeLLMClient(responses=['{"ok": 3}'])
+    client = FailoverLLMClient(primary, fallback)
+    r = client.complete("s", [{"role": "user", "content": "m"}], {"type": "object"})
+    assert r.parsed == {"ok": 3}
 
 
 # --- Registry ------------------------------------------------------------------

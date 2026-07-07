@@ -173,6 +173,10 @@ async def ingest_instrument(
             inserted=res.inserted,
         )
     except Exception as exc:  # noqa: BLE001 - record and continue with others
+        # A failed DB statement leaves the shared session in an aborted
+        # transaction; without rollback every later instrument would fail with
+        # PendingRollbackError (audit HIGH-2).
+        await session.rollback()
         res.error = str(exc)
         log.error("ingest_instrument_failed", symbol=instrument.symbol, error=str(exc))
     return res

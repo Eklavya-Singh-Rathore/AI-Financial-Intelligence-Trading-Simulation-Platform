@@ -1,7 +1,10 @@
 # Local development stack: Postgres (with pgvector) + backend API.
 # Usage (from repo root):  docker compose -f infrastructure/docker-compose.yml up
-# The backend reads DATABASE_URL; for local dev it points at the bundled Postgres
-# instead of Supabase.
+#
+# On first boot the Postgres container loads scripts/base_schema.sql (the
+# pre-existing base tables), so `alembic upgrade head` and the app work against
+# a fresh local database (audit MED-8). Run migrations with:
+#   docker compose -f infrastructure/docker-compose.yml exec backend alembic upgrade head
 
 services:
   db:
@@ -14,6 +17,7 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ../scripts/base_schema.sql:/docker-entrypoint-initdb.d/01_base_schema.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d findb"]
       interval: 5s
@@ -27,6 +31,9 @@ services:
       ENV: development
       LOG_LEVEL: INFO
       ENABLE_SCHEDULER: "true"
+      # Set a real key to exercise auth locally; empty disables auth (dev only).
+      API_KEY: ${API_KEY:-}
+      LLM_PROVIDER: ${LLM_PROVIDER:-fake}
     ports:
       - "8000:8000"
     depends_on:
