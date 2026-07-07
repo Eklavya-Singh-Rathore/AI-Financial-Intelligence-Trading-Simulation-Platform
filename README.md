@@ -24,7 +24,7 @@ suite that runs in CI against a bootstrapped Postgres
 | OHLCV ingestion (yfinance → Supabase `price_bars`) | ✅ |
 | Technical indicators (SMA/EMA/RSI/MACD/Bollinger) | ✅ |
 | Forecasting — baseline drift model | ✅ |
-| Forecasting — Kronos (NeoQuasar/Kronos-small) | ⚠️ adapter ready; vendor `app/ml/kronos_src/` to enable |
+| Forecasting — Kronos (NeoQuasar/Kronos-small) | ✅ vendored + verified end-to-end (baseline stays as fallback) |
 | Backtesting — NautilusTrader 1.230 + simple vectorized engine | ✅ |
 | Daily scheduler (APScheduler) | ✅ |
 | LLM layer — Gemini primary + OpenAI fallback + fake (tests) | ✅ (Gemini live-verified) |

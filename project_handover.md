@@ -2,7 +2,8 @@
 
 > **Single source of truth for resuming development.** Complete enough that a
 > new engineer or AI assistant can continue without prior conversations.
-> Last updated: **2026-07-07** — Phase 2.5 (hardening & audit remediation) complete.
+> Last updated: **2026-07-07** — Phase 2.5 (hardening & audit remediation) complete;
+> Kronos forecaster vendored and verified end-to-end.
 
 ## 1. Project overview
 
@@ -125,9 +126,14 @@ Mounted at `/` (legacy) and `/api/v1` (canonical). API-key protected when
 - NewsAPI **live-verified** (headlines flow; key now sent via header).
 - Semantic memory: symbol-partitioned recall, TTL purge, dedupe index; MiniLM
   loads lazily off the event loop; memory-off degradation preserved.
-- Kronos forecaster: adapter present, source **still not vendored** (twice
-  blocked by permission policy) — `model=kronos` returns a clear 503; baseline
-  is the working default in agent context gathering.
+- Kronos forecaster: **vendored and working end-to-end** (2026-07-07). Source
+  under `app/ml/kronos_src/model/` (github.com/shiyu-coder/Kronos, MIT — see
+  `kronos_src/NOTICE.md`; one local change: relative-import fix). Weights pull
+  from HF (`NeoQuasar/Kronos-small` + `-Tokenizer-base`) on first use, cached
+  after. Verified: a real CPU forecast returns 5 predictions in ~23 s (cold).
+  `model=kronos` is the default forecaster; baseline remains the automatic
+  fallback if the model can't load. Slow-marked test:
+  `test_kronos_forecast_end_to_end`.
 
 ## 9. Testing status
 
@@ -178,11 +184,10 @@ CI exists but has never run remotely.
 
 1. **`DATABASE_URL`** into `.env` (Supabase dashboard → Settings → Database) —
    unblocks all runtime verification (ingest → forecast → backtest → agent run).
-2. **Kronos vendoring**: copy `model/{__init__,kronos,module}.py` + LICENSE
-   from github.com/shiyu-coder/Kronos into `backend/app/ml/kronos_src/`
-   (auto-download twice denied by permission policy).
-3. **Funded OpenAI key** for a real fallback provider (optional).
-4. **GitHub remote + first push** to activate CI (including the DB-integration job).
+2. **Funded OpenAI key** for a real fallback provider (optional).
+3. **GitHub remote + first push** to activate CI (including the DB-integration job).
+
+*(Kronos vendoring — previously outstanding — is DONE and verified.)*
 
 ## 14. Future roadmap
 

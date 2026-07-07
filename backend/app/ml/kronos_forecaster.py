@@ -30,7 +30,7 @@ def _load_predictor(model_id: str, tokenizer_id: str, device: str, max_context: 
         if cached is not None:
             return cached
         try:
-            from app.ml.kronos_src import Kronos, KronosPredictor, KronosTokenizer
+            from app.ml.kronos_src.model import Kronos, KronosPredictor, KronosTokenizer
         except Exception as exc:  # noqa: BLE001
             raise ForecasterError(
                 "Kronos model source is not available. Vendor it under "
