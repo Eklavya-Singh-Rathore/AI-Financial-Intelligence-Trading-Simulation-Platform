@@ -56,27 +56,29 @@ class GeminiClient(LLMClient):
         )
 
         started = time.perf_counter()
+        # The WHOLE interaction is normalized to LLMError: response attribute
+        # access (e.g. .text on a safety-blocked/empty response) can raise just
+        # like the HTTP call, and failover must see one exception type (HIGH-1).
         try:
             response = self._client.models.generate_content(
                 model=self.model, contents=contents, config=config
             )
+            text = response.text or ""
+            if not text.strip():
+                raise LLMError("gemini returned an empty response")
+            usage: dict[str, int] = {}
+            meta = getattr(response, "usage_metadata", None)
+            if meta is not None:
+                usage = {
+                    "input_tokens": int(getattr(meta, "prompt_token_count", 0) or 0),
+                    "output_tokens": int(getattr(meta, "candidates_token_count", 0) or 0),
+                }
+            parsed = parse_json_text(text) if json_schema else None
+        except LLMError:
+            raise
         except Exception as exc:  # noqa: BLE001 - normalize provider errors
             raise LLMError(f"gemini request failed: {exc}") from exc
         latency_ms = int((time.perf_counter() - started) * 1000)
-
-        text = response.text or ""
-        if not text.strip():
-            raise LLMError("gemini returned an empty response")
-
-        usage: dict[str, int] = {}
-        meta = getattr(response, "usage_metadata", None)
-        if meta is not None:
-            usage = {
-                "input_tokens": int(getattr(meta, "prompt_token_count", 0) or 0),
-                "output_tokens": int(getattr(meta, "candidates_token_count", 0) or 0),
-            }
-
-        parsed = parse_json_text(text) if json_schema else None
         log.info(
             "llm_call", provider=self.provider, model=self.model,
             latency_ms=latency_ms, **usage,

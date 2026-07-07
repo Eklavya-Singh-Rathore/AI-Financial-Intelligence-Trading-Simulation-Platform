@@ -73,10 +73,16 @@ def fetch_headlines(
         "language": "en",
         "sortBy": "publishedAt",
         "pageSize": min(limit, 100),
-        "apiKey": settings.newsapi_key,
     }
     try:
-        response = httpx.get(NEWSAPI_URL, params=params, timeout=20.0)
+        # Key travels in a header, not the query string, so proxies/access logs
+        # never see it (audit LOW-1).
+        response = httpx.get(
+            NEWSAPI_URL,
+            params=params,
+            headers={"X-Api-Key": settings.newsapi_key},
+            timeout=20.0,
+        )
         payload = response.json()
         if response.status_code != 200 or payload.get("status") != "ok":
             log.warning(

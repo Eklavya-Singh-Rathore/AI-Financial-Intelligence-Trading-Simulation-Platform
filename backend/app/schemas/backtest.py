@@ -4,7 +4,24 @@ from __future__ import annotations
 
 from datetime import date
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+
+class SmaCrossoverParams(BaseModel):
+    """Typed parameters for the sma_crossover strategy (audit LOW-5).
+
+    Accepts the same JSON shape as the previous open dict, but rejects invalid
+    windows at the API boundary instead of deep inside the engine.
+    """
+
+    fast: int = Field(default=10, ge=2, le=200)
+    slow: int = Field(default=30, ge=3, le=400)
+
+    @model_validator(mode="after")
+    def _fast_before_slow(self) -> SmaCrossoverParams:
+        if self.fast >= self.slow:
+            raise ValueError("fast window must be smaller than slow window")
+        return self
 
 
 class BacktestRequest(BaseModel):
@@ -14,10 +31,7 @@ class BacktestRequest(BaseModel):
     start: date | None = None
     end: date | None = None
     initial_cash: float = Field(default=1_000_000.0, gt=0)
-    params: dict = Field(
-        default_factory=lambda: {"fast": 10, "slow": 30},
-        description="Strategy parameters, e.g. {'fast': 10, 'slow': 30}.",
-    )
+    params: SmaCrossoverParams = Field(default_factory=SmaCrossoverParams)
 
 
 class BacktestResultOut(BaseModel):

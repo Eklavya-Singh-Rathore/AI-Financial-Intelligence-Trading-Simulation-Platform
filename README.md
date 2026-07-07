@@ -7,7 +7,17 @@ market data, computes technical indicators, forecasts prices with the
 strategies on [NautilusTrader](https://nautilustrader.io). **No real trading** —
 simulation and analytics only.
 
-## Status: Phase 2 (multi-agent system) complete
+## Status: Phase 2.5 (hardening & audit remediation) complete
+
+All Critical and High findings from `AUDIT_REPORT.md` are remediated in code:
+API-key auth + rate limiting + run-concurrency caps, CPU/model work off the
+event loop, session-rollback discipline, orphan-run recovery + per-run
+timeouts, normalized LLM failover with retry classification, pooler-safe DB
+config, pinned dependencies (`backend/requirements.lock`), hardened non-root
+Docker image, prompt trust boundaries, fail-closed risk defaults, sanitized
+errors, request-ID logging, Prometheus `/metrics`, and a DB-integration test
+suite that runs in CI against a bootstrapped Postgres
+(`scripts/base_schema.sql`).
 
 | Capability | State |
 |---|---|
@@ -70,6 +80,19 @@ alembic upgrade head
 # run
 uvicorn app.main:app --reload                     # Swagger at http://localhost:8000/docs
 ```
+
+### Security model (Phase 2.5)
+
+- Set `API_KEY` in `.env`; every endpoint except `/live`, `/health`, and docs
+  then requires the `X-API-Key` header. Empty key = open (development only,
+  loudly warned at startup).
+- Per-client rate limiting (`RATE_LIMIT_PER_MINUTE`), agent-run concurrency cap
+  (`MAX_CONCURRENT_AGENT_RUNS`, 429 on saturation), one in-flight run per
+  symbol (409), and `Idempotency-Key` support on `POST /agents/run`.
+- Routes are also mounted under `/api/v1` (canonical going forward); root
+  paths remain for backward compatibility.
+- `GET /live` = pure liveness; `GET /health` = readiness (DB check);
+  `GET /metrics` = Prometheus (API-key protected).
 
 ### Key endpoints
 

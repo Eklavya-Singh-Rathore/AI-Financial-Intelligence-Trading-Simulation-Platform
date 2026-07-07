@@ -59,9 +59,14 @@ def apply_hard_limits(proposal: dict, assessment: dict, backtest: dict) -> dict:
         size = settings.max_position_pct
         limited_by.append("max_position_pct")
 
-    # Drawdown veto from backtest evidence.
+    # Drawdown veto from backtest evidence. FAIL CLOSED (audit MED-2): when the
+    # evidence is missing entirely, the veto cannot fire - so halve the size
+    # instead of silently proceeding with weaker risk backing.
     max_dd = backtest.get("metrics", {}).get("max_drawdown_pct")
-    if (
+    if action != "HOLD" and not isinstance(max_dd, int | float):
+        size = round(size / 2.0, 2)
+        limited_by.append("missing_evidence")
+    elif (
         action != "HOLD"
         and isinstance(max_dd, int | float)
         and max_dd <= -abs(settings.risk_max_drawdown_veto_pct)

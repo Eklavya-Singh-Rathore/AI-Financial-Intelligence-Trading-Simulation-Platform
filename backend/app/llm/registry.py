@@ -6,6 +6,9 @@ The active provider chain comes from settings (``LLM_PROVIDER``,
 
 from __future__ import annotations
 
+import random
+import time
+
 import structlog
 
 from app.core.config import Settings, get_settings
@@ -16,14 +19,35 @@ log = structlog.get_logger(__name__)
 
 PROVIDERS = ("gemini", "openai", "fake")
 
+_MAX_ATTEMPTS = 2
+_BACKOFF_BASE_SECONDS = 1.5
+
 
 class FailoverLLMClient(LLMClient):
-    """Try the primary provider (with one retry), then fall back."""
+    """Primary with classified retry + backoff, then fallback.
+
+    * Any exception (LLMError or foreign) is normalized to LLMError.
+    * Non-retryable errors (auth/quota/bad request) skip the retry and go
+      straight to the fallback (audit HIGH-1 / MED-10).
+    * Retries back off with jitter (this client runs in a worker thread, so
+      ``time.sleep`` is safe).
+    """
 
     def __init__(self, primary: LLMClient, fallback: LLMClient | None) -> None:
         self.primary = primary
         self.fallback = fallback
         self.provider = primary.provider
+
+    @staticmethod
+    def _call(
+        client: LLMClient, system: str, messages: list[Message], schema: dict | None
+    ) -> LLMResponse:
+        try:
+            return client.complete(system, messages, schema)
+        except LLMError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - belt-and-braces normalization
+            raise LLMError(f"{client.provider} raised {type(exc).__name__}: {exc}") from exc
 
     def complete(
         self,
@@ -32,24 +56,29 @@ class FailoverLLMClient(LLMClient):
         json_schema: dict | None = None,
     ) -> LLMResponse:
         last_error: LLMError | None = None
-        for attempt in (1, 2):
+        for attempt in range(1, _MAX_ATTEMPTS + 1):
             try:
-                return self.primary.complete(system, messages, json_schema)
+                return self._call(self.primary, system, messages, json_schema)
             except LLMError as exc:
                 last_error = exc
                 log.warning(
                     "llm_primary_failed",
                     provider=self.primary.provider,
                     attempt=attempt,
-                    error=str(exc),
+                    retryable=exc.retryable,
+                    error=str(exc)[:300],
                 )
+                if not exc.retryable:
+                    break  # retrying cannot help; go to fallback
+                if attempt < _MAX_ATTEMPTS:
+                    time.sleep(_BACKOFF_BASE_SECONDS * attempt + random.uniform(0, 0.5))
         if self.fallback is not None:
             log.warning(
                 "llm_failover",
                 from_provider=self.primary.provider,
                 to_provider=self.fallback.provider,
             )
-            return self.fallback.complete(system, messages, json_schema)
+            return self._call(self.fallback, system, messages, json_schema)
         assert last_error is not None
         raise last_error
 

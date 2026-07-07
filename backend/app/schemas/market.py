@@ -55,6 +55,10 @@ class IngestRequest(BaseModel):
     days: int | None = Field(default=None, ge=1, description="Look-back window in days.")
     start: date | None = None
     end: date | None = None
+    background: bool = Field(
+        default=False,
+        description="Run the ingest in the background; response has status='started'.",
+    )
 
 
 class InstrumentIngestOut(BaseModel):
@@ -67,6 +71,7 @@ class InstrumentIngestOut(BaseModel):
 
 
 class IngestSummaryOut(BaseModel):
+    status: str = "completed"  # completed | started (background mode)
     total_instruments: int
     total_inserted: int
     total_fetched: int

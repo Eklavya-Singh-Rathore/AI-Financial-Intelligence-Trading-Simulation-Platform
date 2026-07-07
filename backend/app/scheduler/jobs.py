@@ -11,30 +11,52 @@ from __future__ import annotations
 import structlog
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from sqlalchemy import text
 
 from app.core.config import get_settings
-from app.db.base import get_sessionmaker
+from app.db.base import get_engine, get_sessionmaker
 from app.services import data_ingest
 
 log = structlog.get_logger(__name__)
 
 _scheduler: AsyncIOScheduler | None = None
 
+# Cluster-wide advisory lock key for the daily ingest (any stable int64).
+DAILY_INGEST_LOCK_KEY = 815_001
+
 
 async def daily_ingest_job() -> None:
-    """Fetch the last 7 days of bars for every active instrument."""
-    log.info("daily_ingest_started")
-    try:
-        sm = get_sessionmaker()
-        async with sm() as session:
-            summary = await data_ingest.ingest_all(session, days=7)
-        log.info(
-            "daily_ingest_finished",
-            instruments=summary.total_instruments,
-            inserted=summary.total_inserted,
-        )
-    except Exception as exc:  # noqa: BLE001 - a failed job must not kill the app
-        log.error("daily_ingest_failed", error=str(exc))
+    """Fetch the last 7 days of bars for every active instrument.
+
+    A Postgres advisory lock makes the job single-flight across replicas /
+    multiple workers (audit MED-5): whoever fails to take the lock skips.
+    """
+    engine = get_engine()
+    async with engine.connect() as lock_conn:
+        got_lock = (
+            await lock_conn.execute(
+                text("SELECT pg_try_advisory_lock(:key)"), {"key": DAILY_INGEST_LOCK_KEY}
+            )
+        ).scalar()
+        if not got_lock:
+            log.info("daily_ingest_skipped", reason="another instance holds the lock")
+            return
+        try:
+            log.info("daily_ingest_started")
+            sm = get_sessionmaker()
+            async with sm() as session:
+                summary = await data_ingest.ingest_all(session, days=7)
+            log.info(
+                "daily_ingest_finished",
+                instruments=summary.total_instruments,
+                inserted=summary.total_inserted,
+            )
+        except Exception as exc:  # noqa: BLE001 - a failed job must not kill the app
+            log.error("daily_ingest_failed", error=str(exc), exc_info=True)
+        finally:
+            await lock_conn.execute(
+                text("SELECT pg_advisory_unlock(:key)"), {"key": DAILY_INGEST_LOCK_KEY}
+            )
 
 
 def start_scheduler() -> AsyncIOScheduler | None:
