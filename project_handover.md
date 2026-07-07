@@ -180,14 +180,34 @@ CI exists but has never run remotely.
   SSE/polling on run progress; queue extraction when adding scheduled
   autonomous runs.
 
-## 13. Outstanding prerequisites (only the owner can provide)
+## 13. Runtime verification — DONE (2026-07-07, Phase 3 step 0)
 
-1. **`DATABASE_URL`** into `.env` (Supabase dashboard → Settings → Database) —
-   unblocks all runtime verification (ingest → forecast → backtest → agent run).
-2. **Funded OpenAI key** for a real fallback provider (optional).
-3. **GitHub remote + first push** to activate CI (including the DB-integration job).
+`DATABASE_URL` supplied by owner and wired into `.env`. First live results:
+- **Ingest:** 16/16 instruments, **11,844 bars** (3y daily). TATAMOTORS demerger
+  handled: yfinance mapping updated to successor **TMPV.NS** (registry data fix).
+- **Read path:** prices + indicators live; **Kronos forecast on real data** works;
+  **NautilusTrader backtest** works (RELIANCE 10/30 SMA: −4.77%, maxDD −28.2%).
+- **First live agent run COMPLETED** (TCS, 7 Gemini calls, 12k tokens): decision
+  `HOLD 0%` via **drawdown_veto** — the coded risk limits fired in production.
+- `pytest -m db` green against Supabase (4 passed, 2 fake-LLM skips).
 
-*(Kronos vendoring — previously outstanding — is DONE and verified.)*
+**Bugs found & fixed by live verification** (the audit's "unable to verify" was right):
+1. `Instrument.status/instrument_type` mapped as String vs PG enum → asyncpg
+   `operator does not exist` (fixed: ENUM(create_type=False)).
+2. Nautilus drawdown/Sharpe measured CASH not equity (−96% fake DD) → replaced
+   with mark-to-market equity curve from fills × bar closes.
+3. Backtests ran on RAW prices → corporate-action cliffs (RELIANCE 1:1 bonus)
+   corrupted results; backtests now use adjusted OHLC.
+4. Gemini free-tier 429 mid-pipeline with useless 1.5s retry → rate-limit-aware
+   backoff (35s+, extra attempt) in the failover client.
+5. ORM access after rollback in ingest error path → MissingGreenlet cascade
+   (ingest loop now uses plain values snapshot).
+
+## Outstanding prerequisites
+
+1. **Funded OpenAI key** for a real fallback provider (optional; Gemini free
+   tier is tight — a paid tier would remove 429 stalls).
+2. **GitHub remote + first push** to activate CI.
 
 ## 14. Future roadmap
 

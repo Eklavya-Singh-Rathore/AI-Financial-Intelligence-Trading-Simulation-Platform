@@ -125,7 +125,7 @@ class NautilusBacktester(Backtester):
 
         try:
             bt_engine.run()
-            metrics = self._extract_metrics(bt_engine, venue, config.initial_cash)
+            metrics = self._extract_metrics(bt_engine, df, config.initial_cash)
         finally:
             bt_engine.dispose()
 
@@ -164,24 +164,53 @@ class NautilusBacktester(Backtester):
         return bars
 
     @staticmethod
-    def _extract_metrics(bt_engine, venue, initial_cash: float) -> dict:
+    def _equity_curve(
+        df: pd.DataFrame, fills: pd.DataFrame | None, initial_cash: float
+    ) -> pd.Series:
+        """Daily mark-to-market equity (cash + shares x close) from the fills.
+
+        Nautilus's account report and analyzer returns track the CASH balance on
+        a CASH account - capital deployed into a position reads as a ~95% "loss"
+        until the position closes, fabricating absurd drawdowns (found in live
+        verification). Marking to market against the bar closes is the honest
+        portfolio equity.
+        """
+        events: dict = {}
+        if fills is not None and len(fills):
+            for _, row in fills.iterrows():
+                day = pd.Timestamp(row["ts_last"]).date()
+                qty = float(row["filled_qty"])
+                px = float(row["avg_px"])
+                signed = qty if str(row["side"]).upper().endswith("BUY") else -qty
+                events.setdefault(day, []).append((signed, px))
+
+        cash = float(initial_cash)
+        shares = 0.0
+        values = []
+        for ts, row in df.iterrows():
+            for signed_qty, px in events.get(pd.Timestamp(ts).date(), []):
+                cash -= signed_qty * px
+                shares += signed_qty
+            values.append(cash + shares * float(row["close"]))
+        return pd.Series(values, index=df.index, dtype=float)
+
+    @staticmethod
+    def _extract_metrics(bt_engine, df: pd.DataFrame, initial_cash: float) -> dict:
         result = bt_engine.get_result()
         pnl = (result.stats_pnls or {}).get("USD", {})
-        rets = result.stats_returns or {}
-
-        final_equity = float(initial_cash)
-        max_dd = 0.0
-        acct = bt_engine.trader.generate_account_report(venue)
-        if acct is not None and len(acct) and "total" in acct.columns:
-            totals = pd.to_numeric(acct["total"], errors="coerce").dropna()
-            if len(totals):
-                final_equity = float(totals.iloc[-1])
-                running_max = totals.cummax()
-                drawdown = totals / running_max - 1.0
-                max_dd = float(drawdown.min())
 
         fills = bt_engine.trader.generate_order_fills_report()
         num_fills = 0 if fills is None else len(fills)
+
+        equity = NautilusBacktester._equity_curve(df, fills, initial_cash)
+        final_equity = float(equity.iloc[-1]) if len(equity) else float(initial_cash)
+        drawdown = equity / equity.cummax() - 1.0
+        max_dd = float(drawdown.min()) if len(drawdown) else 0.0
+
+        daily = equity.pct_change().dropna()
+        std = float(daily.std(ddof=0))
+        sharpe = float(daily.mean() / std * (252**0.5)) if std > 0 else 0.0
+        volatility_pct = std * (252**0.5) * 100.0
         total_return_pct = (final_equity / initial_cash - 1.0) * 100.0
 
         def _num(mapping: dict, key: str, default: float = 0.0) -> float:
@@ -191,14 +220,13 @@ class NautilusBacktester(Backtester):
         return {
             "total_return_pct": round(total_return_pct, 4),
             "pnl_total": _num(pnl, "PnL (total)"),
-            "pnl_pct": _num(pnl, "PnL% (total)"),
-            "sharpe_ratio": round(_num(rets, "Sharpe Ratio (252 days)"), 4),
-            "sortino_ratio": round(_num(rets, "Sortino Ratio (252 days)"), 4),
-            "volatility_pct": round(_num(rets, "Returns Volatility (252 days)") * 100, 4),
+            "sharpe_ratio": round(sharpe, 4),
+            "volatility_pct": round(volatility_pct, 4),
             "profit_factor": round(_num(pnl, "Profit Factor"), 4),
             "win_rate": round(_num(pnl, "Win Rate"), 4),
+            "expectancy": round(_num(pnl, "Expectancy"), 2),
             "max_drawdown_pct": round(max_dd * 100, 4),
             "final_equity": round(final_equity, 2),
             "num_fills": num_fills,
-            "bars": int(len(acct)) if acct is not None else 0,
+            "bars": int(len(df)),
         }

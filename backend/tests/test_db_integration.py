@@ -14,7 +14,7 @@ from datetime import UTC, date, datetime, timedelta
 import pytest
 import pytest_asyncio
 from app.core.config import get_settings
-from app.db.base import get_sessionmaker
+from app.db.base import dispose_engine, get_sessionmaker
 from app.models.agent_run import AgentMessage, AgentRun
 from app.models.instrument import Instrument
 from app.models.provider import DataProvider
@@ -35,6 +35,20 @@ PROVIDER_ID = uuid.UUID("00000000-0000-4000-8000-000000000003")
 SYMBOL = "TESTINST"
 
 
+@pytest_asyncio.fixture(autouse=True)
+async def _fresh_engine():
+    """Fresh engine per test: pytest-asyncio gives each test its own event
+    loop, and asyncpg pool connections are loop-bound ('Event loop is closed'
+    otherwise). Cross-loop disposal errors are irrelevant - suppress them."""
+    import contextlib
+
+    with contextlib.suppress(Exception):
+        await dispose_engine()
+    yield
+    with contextlib.suppress(Exception):
+        await dispose_engine()
+
+
 @pytest_asyncio.fixture()
 async def session():
     sm = get_sessionmaker()
@@ -47,16 +61,19 @@ async def seeded(session):
     """Idempotently seed one exchange/instrument/provider/mapping + 80 bars."""
     await session.execute(
         text(
-            "INSERT INTO exchanges (id, code, name) "
-            "VALUES (:id, 'TEST', 'Test Exchange') ON CONFLICT (code) DO NOTHING"
+            "INSERT INTO exchanges (id, code, name, country, timezone, currency) "
+            "VALUES (:id, 'TEST', 'Test Exchange', 'IN', 'Asia/Kolkata', 'INR') "
+            "ON CONFLICT (code) DO NOTHING"
         ),
         {"id": str(EXCHANGE_ID)},
     )
+    # status='suspended': keeps the test instrument OUT of the active universe
+    # (dashboard/ingest) if this suite ever runs against a shared database.
     await session.execute(
         text(
             "INSERT INTO instruments "
             "(id, symbol, display_name, instrument_type, exchange_id, currency, country, status) "
-            "VALUES (:id, :sym, 'Test Instrument', 'equity', :ex, 'INR', 'IN', 'active') "
+            "VALUES (:id, :sym, 'Test Instrument', 'equity', :ex, 'INR', 'IN', 'suspended') "
             "ON CONFLICT (symbol) DO NOTHING"
         ),
         {"id": str(INSTRUMENT_ID), "sym": SYMBOL, "ex": str(EXCHANGE_ID)},
@@ -148,10 +165,13 @@ async def test_upsert_is_idempotent(session, seeded):
 async def test_session_recovers_after_db_error(session, seeded):
     """The rollback fix (HIGH-2): a failed statement must not poison the session."""
     instrument, provider = seeded
+    # Snapshot plain values BEFORE the failure: rollback expires ORM objects,
+    # and touching them afterwards raises MissingGreenlet (mirrors production).
+    instrument_id, provider_id = instrument.id, provider.id
     bad_row = {
         "id": uuid.uuid4(),
         "instrument_id": uuid.uuid4(),  # FK violation - no such instrument
-        "provider_id": provider.id,
+        "provider_id": provider_id,
         "date": date(2020, 1, 1),
         "timeframe": "daily",
         "open": 1.0,
@@ -183,7 +203,7 @@ async def test_session_recovers_after_db_error(session, seeded):
         },
         index=pd.to_datetime(["2020-07-01"]),
     )
-    good = normalize_bars(df, instrument.id, provider.id)
+    good = normalize_bars(df, instrument_id, provider_id)
     inserted = await upsert_price_bars(session, good)
     assert inserted in (0, 1)  # session is usable again
 
@@ -248,8 +268,13 @@ async def test_orphan_sweep_marks_stale_runs_failed(session, seeded):
     swept = await sweep_orphaned_runs()
     assert swept >= 1
 
+    # The sweep ran on ANOTHER session; force re-population past the identity map.
     refreshed = (
-        await session.execute(select(AgentRun).where(AgentRun.id == stale.id))
+        await session.execute(
+            select(AgentRun)
+            .where(AgentRun.id == stale.id)
+            .execution_options(populate_existing=True)
+        )
     ).scalar_one()
     assert refreshed.status == "failed"
     assert refreshed.error is not None and refreshed.error.startswith("orphaned")

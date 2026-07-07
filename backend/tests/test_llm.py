@@ -138,6 +138,39 @@ def test_foreign_exceptions_are_normalized_and_fail_over(monkeypatch):
     assert r.parsed == {"ok": 3}
 
 
+def test_rate_limit_gets_long_backoff_and_extra_attempts(monkeypatch):
+    """A 429/RESOURCE_EXHAUSTED must wait out the window, not fast-retry.
+
+    Observed live: Gemini free tier 429 mid-pipeline; a 1.5s retry is useless.
+    """
+    sleeps: list[float] = []
+    monkeypatch.setattr("app.llm.registry.time.sleep", sleeps.append)
+
+    class RateLimited(FakeLLMClient):
+        def __init__(self):
+            super().__init__()
+            self.n = 0
+
+        def complete(self, system, messages, json_schema=None):
+            self.n += 1
+            if self.n <= 2:
+                raise LLMError("gemini request failed: 429 RESOURCE_EXHAUSTED quota")
+            return super().complete(system, messages, json_schema)
+
+    primary = RateLimited()
+    primary.provider = "gemini"
+    fallback = FakeLLMClient()
+    client = FailoverLLMClient(primary, fallback)
+    r = client.complete("s", [{"role": "user", "content": "m"}], {"type": "object"})
+    # third primary attempt succeeded - no failover needed
+    assert primary.n == 3
+    assert len(fallback.calls) == 0
+    assert r.provider == "gemini"  # served by the (recovered) primary
+    # both waits were long (rate-limit window), not the short generic backoff
+    assert len(sleeps) == 2
+    assert all(s >= 35.0 for s in sleeps)
+
+
 # --- Registry ------------------------------------------------------------------
 
 def _settings(**kwargs) -> Settings:

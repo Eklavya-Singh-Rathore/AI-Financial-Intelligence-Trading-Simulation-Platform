@@ -82,3 +82,7 @@ def test_nautilus_backtester_end_to_end(price_df):
     assert "sharpe_ratio" in m
     assert "final_equity" in m
     assert m["final_equity"] > 0
+    # Drawdown must reflect PORTFOLIO equity, not cash utilization: with ~95%
+    # of capital deployed per trade, the cash-based bug reported ~-95% here.
+    assert m["max_drawdown_pct"] > -60.0
+    assert m["max_drawdown_pct"] <= 0.0

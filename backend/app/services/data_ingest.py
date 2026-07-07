@@ -21,7 +21,6 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.instruments import DEFAULT_CURRENCY, DEFAULT_TIMEFRAME
-from app.models.instrument import Instrument
 from app.models.price_bar import PriceBar
 from app.services import market_data
 
@@ -150,24 +149,29 @@ async def _fetch_with_retry(
 
 async def ingest_instrument(
     session: AsyncSession,
-    instrument: Instrument,
+    instrument_id: uuid.UUID,
+    symbol: str,
+    currency: str,
     provider_id: uuid.UUID,
     yf_symbol: str,
     start: date,
     end: date,
 ) -> InstrumentIngestResult:
-    res = InstrumentIngestResult(symbol=instrument.symbol, provider_symbol=yf_symbol)
+    """Ingest one instrument. Takes PLAIN values, never ORM objects: a rollback
+    in the error path expires ORM instances, and touching an expired attribute
+    afterwards raises MissingGreenlet (found by the DB integration suite)."""
+    res = InstrumentIngestResult(symbol=symbol, provider_symbol=yf_symbol)
     try:
         df = await _fetch_with_retry(yf_symbol, start, end)
         rows = normalize_bars(
-            df, instrument.id, provider_id, currency=instrument.currency or DEFAULT_CURRENCY
+            df, instrument_id, provider_id, currency=currency or DEFAULT_CURRENCY
         )
         res.fetched = len(rows)
         res.inserted = await upsert_price_bars(session, rows)
         res.skipped = res.fetched - res.inserted
         log.info(
             "ingest_instrument_ok",
-            symbol=instrument.symbol,
+            symbol=symbol,
             yf_symbol=yf_symbol,
             fetched=res.fetched,
             inserted=res.inserted,
@@ -178,7 +182,7 @@ async def ingest_instrument(
         # PendingRollbackError (audit HIGH-2).
         await session.rollback()
         res.error = str(exc)
-        log.error("ingest_instrument_failed", symbol=instrument.symbol, error=str(exc))
+        log.error("ingest_instrument_failed", symbol=symbol, error=str(exc))
     return res
 
 
@@ -201,24 +205,31 @@ async def ingest_all(
         start = end - timedelta(days=lookback)
 
     provider = await market_data.get_yfinance_provider(session)
-    symbol_map = await market_data.get_provider_symbol_map(session, provider.id)
+    provider_id = provider.id
+    symbol_map = await market_data.get_provider_symbol_map(session, provider_id)
     instruments = await market_data.list_instruments(session, active_only=True)
     if symbols:
         wanted = {s.upper() for s in symbols}
         instruments = [i for i in instruments if i.symbol.upper() in wanted]
 
-    summary = IngestSummary(total_instruments=len(instruments))
-    for inst in instruments:
-        yf_symbol = symbol_map.get(inst.id)
+    # Snapshot plain values up front: after any mid-loop rollback the ORM
+    # objects are expired and must not be touched again.
+    targets = [(i.id, i.symbol, i.currency) for i in instruments]
+
+    summary = IngestSummary(total_instruments=len(targets))
+    for instrument_id, symbol, currency in targets:
+        yf_symbol = symbol_map.get(instrument_id)
         if not yf_symbol:
             res = InstrumentIngestResult(
-                symbol=inst.symbol,
+                symbol=symbol,
                 provider_symbol="",
                 error="no active yfinance provider mapping",
             )
             summary.results.append(res)
             continue
-        res = await ingest_instrument(session, inst, provider.id, yf_symbol, start, end)
+        res = await ingest_instrument(
+            session, instrument_id, symbol, currency, provider_id, yf_symbol, start, end
+        )
         summary.results.append(res)
         summary.total_inserted += res.inserted
         summary.total_fetched += res.fetched
