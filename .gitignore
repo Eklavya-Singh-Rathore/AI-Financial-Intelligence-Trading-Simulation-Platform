@@ -46,3 +46,6 @@ logs/
 
 # Planning doc contains leaked secrets - keep out of history (rotate those keys!)
 deep-research-report*.md
+
+# TS incremental build info
+*.tsbuildinfo
