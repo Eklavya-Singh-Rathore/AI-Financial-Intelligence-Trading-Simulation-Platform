@@ -13,7 +13,7 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.routers import agents, backtest, health, ingest, instruments
+from app.api.routers import agents, backtest, chat, health, ingest, instruments
 from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.core.middleware import RequestIDMiddleware
@@ -74,7 +74,7 @@ if _cors:
 
 # Protected business routers, mounted at both the legacy root and /api/v1.
 # The root mount is kept for backward compatibility; /api/v1 is canonical.
-_PROTECTED = [instruments.router, ingest.router, backtest.router, agents.router]
+_PROTECTED = [instruments.router, ingest.router, backtest.router, agents.router, chat.router]
 _auth = [Depends(require_api_key)]
 for router in _PROTECTED:
     app.include_router(router, dependencies=_auth)

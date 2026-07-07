@@ -129,6 +129,21 @@ async def seeded(session):
     return instrument, provider
 
 
+async def test_universe_summary_shape(session):
+    """Summary returns one entry per ACTIVE instrument with the dashboard fields."""
+    from app.services.market_data import universe_summary
+
+    rows = await universe_summary(session)
+    for row in rows:
+        assert set(row) >= {
+            "symbol", "display_name", "instrument_type", "last_date",
+            "last_close", "change_1d_pct", "change_5d_pct", "change_20d_pct",
+            "sparkline",
+        }
+        assert len(row["sparkline"]) <= 30
+        assert row["symbol"] != SYMBOL  # suspended test instrument excluded
+
+
 async def test_migrations_created_project_tables(session):
     result = await session.execute(
         text(
@@ -278,6 +293,30 @@ async def test_orphan_sweep_marks_stale_runs_failed(session, seeded):
     ).scalar_one()
     assert refreshed.status == "failed"
     assert refreshed.error is not None and refreshed.error.startswith("orphaned")
+
+
+async def test_chat_round_trip_with_fake_llm(session, seeded):
+    """Create session -> send message -> both messages persisted with grounding."""
+    settings = get_settings()
+    if settings.llm_provider != "fake":
+        pytest.skip("requires LLM_PROVIDER=fake (CI sets it)")
+
+    from app.models.chat import ChatSession
+    from app.services.chat_service import send_message
+
+    chat = ChatSession(id=uuid.uuid4())
+    session.add(chat)
+    await session.commit()
+
+    turn = await send_message(session, chat.id, "How does the market look?")
+    assert turn.user_message.role == "user"
+    assert turn.assistant_message.role == "assistant"
+    assert turn.assistant_message.seq == turn.user_message.seq + 1
+    assert turn.assistant_message.content
+    assert turn.assistant_message.context is not None
+    # title auto-set from the first message
+    await session.refresh(chat)
+    assert chat.title.startswith("How does the market look?")
 
 
 async def test_idempotency_key_returns_same_run(seeded):

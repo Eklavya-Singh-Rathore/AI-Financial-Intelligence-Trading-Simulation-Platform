@@ -48,6 +48,18 @@ class IndicatorSeriesOut(BaseModel):
     points: list[IndicatorPoint]
 
 
+class InstrumentSummaryOut(BaseModel):
+    symbol: str
+    display_name: str
+    instrument_type: str
+    last_date: date | None = None
+    last_close: float | None = None
+    change_1d_pct: float | None = None
+    change_5d_pct: float | None = None
+    change_20d_pct: float | None = None
+    sparkline: list[float] = Field(default_factory=list)
+
+
 class IngestRequest(BaseModel):
     symbols: list[str] | None = Field(
         default=None, description="Subset of instrument symbols; omit for the whole universe."

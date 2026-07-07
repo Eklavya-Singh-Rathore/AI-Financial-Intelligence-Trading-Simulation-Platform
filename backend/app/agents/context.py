@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 _DELIMITER_GUARD = re.compile(r"<+/?\s*untrusted[-_]data\s*>+", re.IGNORECASE)
 
 
-def _untrusted_block(title: str, items: list[str]) -> str:
+def untrusted_block(title: str, items: list[str]) -> str:
     """Render external text inside an explicit trust boundary (audit MED-1).
 
     Headlines and recalled memory come from outside the system (news
@@ -61,12 +61,12 @@ class RunContext:
             f"Strategy backtest evidence (SMA crossover): {self.backtest}",
         ]
         if self.headlines:
-            lines.append(_untrusted_block("Recent headlines", self.headlines))
+            lines.append(untrusted_block("Recent headlines", self.headlines))
         else:
             lines.append("Recent headlines: none available")
         if self.memory_notes:
             lines.append(
-                _untrusted_block("Notes from previous analyses (memory)", self.memory_notes)
+                untrusted_block("Notes from previous analyses (memory)", self.memory_notes)
             )
         return "\n\n".join(lines)
 

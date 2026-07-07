@@ -8,6 +8,7 @@ new tables owned by this project.
 
 from app.models.agent_run import AgentEmbedding, AgentMessage, AgentRun
 from app.models.backtest import Backtest
+from app.models.chat import ChatMessage, ChatSession
 from app.models.forecast import Forecast
 from app.models.instrument import Instrument
 from app.models.price_bar import PriceBar
@@ -23,4 +24,6 @@ __all__ = [
     "AgentRun",
     "AgentMessage",
     "AgentEmbedding",
+    "ChatSession",
+    "ChatMessage",
 ]

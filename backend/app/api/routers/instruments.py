@@ -15,6 +15,7 @@ from app.schemas.market import (
     IndicatorPoint,
     IndicatorSeriesOut,
     InstrumentOut,
+    InstrumentSummaryOut,
     PriceBarOut,
     PriceSeriesOut,
 )
@@ -30,6 +31,15 @@ async def list_instruments(
 ) -> list[InstrumentOut]:
     instruments = await market_data.list_instruments(session)
     return [InstrumentOut.model_validate(i) for i in instruments]
+
+
+@router.get("/summary", response_model=list[InstrumentSummaryOut])
+async def universe_summary(
+    session: AsyncSession = Depends(get_session),
+) -> list[InstrumentSummaryOut]:
+    """Whole-universe dashboard payload in one call."""
+    rows = await market_data.universe_summary(session)
+    return [InstrumentSummaryOut.model_validate(r) for r in rows]
 
 
 async def _get_instrument_or_404(session: AsyncSession, symbol: str):
