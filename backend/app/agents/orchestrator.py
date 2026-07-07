@@ -141,35 +141,13 @@ async def gather_context(session: AsyncSession, instrument: Instrument) -> RunCo
 
 
 async def _recall_notes(session: AsyncSession, symbol: str, top_k: int) -> list[str]:
-    """Retrieve summaries of the most relevant past agent messages for a symbol."""
-    try:
-        hits = await embeddings.search_memory(
-            session,
-            f"analysis and trading decision for {symbol}",
-            symbol=symbol,  # no cross-symbol contamination (audit LOW-2)
-            top_k=top_k,
-        )
-    except Exception as exc:  # noqa: BLE001 - memory must never break a run
-        log.warning("memory_search_failed", error=str(exc))
-        return []
-    ids: list[uuid.UUID] = []
-    for h in hits:
-        if h.source_table != "agent_messages":
-            continue
-        try:
-            ids.append(uuid.UUID(h.source_id))
-        except ValueError:  # malformed row must not break the run (LOW-7)
-            log.warning("memory_bad_source_id", source_id=h.source_id[:64])
-    if not ids:
-        return []
-    result = await session.execute(
-        select(AgentMessage).where(AgentMessage.id.in_(ids))
+    """Symbol-scoped memory recall (shared helper in the embeddings service)."""
+    return await embeddings.recall_message_notes(
+        session,
+        f"analysis and trading decision for {symbol}",
+        symbol=symbol,  # no cross-symbol contamination (audit LOW-2)
+        top_k=top_k,
     )
-    notes = []
-    for msg in result.scalars():
-        date = msg.created_at.date().isoformat() if msg.created_at else "?"
-        notes.append(f"[{date}] {msg.agent_name}: {msg.content[:300]}")
-    return notes
 
 
 # --------------------------------------------------------------------------- #

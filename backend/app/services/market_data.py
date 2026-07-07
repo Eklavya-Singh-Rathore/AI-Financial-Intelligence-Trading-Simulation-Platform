@@ -10,7 +10,7 @@ import uuid
 from datetime import date
 
 import pandas as pd
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.instruments import DEFAULT_TIMEFRAME, YFINANCE_PROVIDER_CODE
@@ -94,6 +94,58 @@ async def get_price_bars(
     stmt = stmt.order_by(PriceBar.date)
     result = await session.execute(stmt)
     return list(result.scalars().all())
+
+
+SUMMARY_BARS = 30  # sparkline length; also covers the 20d change window
+
+
+async def universe_summary(session: AsyncSession) -> list[dict]:
+    """Dashboard payload: latest close, 1/5/20-day changes, and a sparkline for
+    every active instrument, from ONE window-function query."""
+    rn = (
+        func.row_number()
+        .over(partition_by=PriceBar.instrument_id, order_by=PriceBar.date.desc())
+        .label("rn")
+    )
+    recent = (
+        select(PriceBar.instrument_id, PriceBar.date, PriceBar.close, PriceBar.adj_close, rn)
+        .where(PriceBar.timeframe == DEFAULT_TIMEFRAME)
+        .subquery()
+    )
+    result = await session.execute(
+        select(recent).where(recent.c.rn <= SUMMARY_BARS).order_by(recent.c.date)
+    )
+    by_instrument: dict[uuid.UUID, list] = {}
+    for row in result:
+        by_instrument.setdefault(row.instrument_id, []).append(row)
+
+    def pct_change(rows: list, days_back: int) -> float | None:
+        # rows are ascending by date; adjusted closes for split-safe ratios.
+        if len(rows) <= days_back:
+            return None
+        last = float(rows[-1].adj_close or rows[-1].close)
+        base = float(rows[-1 - days_back].adj_close or rows[-1 - days_back].close)
+        if base == 0:
+            return None
+        return round((last / base - 1.0) * 100, 2)
+
+    instruments = await list_instruments(session, active_only=True)
+    summary = []
+    for inst in instruments:
+        rows = by_instrument.get(inst.id, [])
+        entry: dict = {
+            "symbol": inst.symbol,
+            "display_name": inst.display_name,
+            "instrument_type": inst.instrument_type,
+            "last_date": rows[-1].date if rows else None,
+            "last_close": round(float(rows[-1].close), 2) if rows else None,
+            "change_1d_pct": pct_change(rows, 1),
+            "change_5d_pct": pct_change(rows, 5),
+            "change_20d_pct": pct_change(rows, 20),
+            "sparkline": [round(float(r.adj_close or r.close), 2) for r in rows],
+        }
+        summary.append(entry)
+    return summary
 
 
 async def price_bars_dataframe(

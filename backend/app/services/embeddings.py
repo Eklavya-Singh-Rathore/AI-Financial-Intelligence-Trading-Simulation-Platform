@@ -172,6 +172,41 @@ async def search_memory(
     ]
 
 
+async def recall_message_notes(
+    session: AsyncSession,
+    query_text: str,
+    *,
+    symbol: str | None = None,
+    top_k: int | None = None,
+) -> list[str]:
+    """Search memory and resolve hits into '[date] agent: snippet' note lines.
+
+    Shared by the agent orchestrator (symbol-scoped) and the chat service
+    (universe-wide). Never raises - memory is best-effort.
+    """
+    try:
+        hits = await search_memory(session, query_text, symbol=symbol, top_k=top_k)
+    except Exception as exc:  # noqa: BLE001 - memory must never break callers
+        log.warning("memory_search_failed", error=str(exc))
+        return []
+    ids: list[uuid.UUID] = []
+    for h in hits:
+        if h.source_table != "agent_messages":
+            continue
+        try:
+            ids.append(uuid.UUID(h.source_id))
+        except ValueError:
+            log.warning("memory_bad_source_id", source_id=h.source_id[:64])
+    if not ids:
+        return []
+    result = await session.execute(select(AgentMessage).where(AgentMessage.id.in_(ids)))
+    notes = []
+    for msg in result.scalars():
+        day = msg.created_at.date().isoformat() if msg.created_at else "?"
+        notes.append(f"[{day}] {msg.agent_name}: {msg.content[:300]}")
+    return notes
+
+
 async def purge_expired_embeddings(session: AsyncSession) -> int:
     """Delete embeddings older than the configured TTL. Returns rows removed."""
     ttl_days = get_settings().memory_ttl_days
