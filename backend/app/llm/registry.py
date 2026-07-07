@@ -22,6 +22,17 @@ PROVIDERS = ("gemini", "openai", "fake")
 _MAX_ATTEMPTS = 2
 _BACKOFF_BASE_SECONDS = 1.5
 
+# Rate limits (429/RESOURCE_EXHAUSTED) are window-based: a short retry is
+# pointless (observed live on the Gemini free tier). Wait out the window.
+_RATE_LIMIT_MARKERS = ("429", "resource_exhausted", "rate limit", "rate-limit")
+_RATE_LIMIT_BACKOFF_SECONDS = 35.0
+_RATE_LIMIT_MAX_ATTEMPTS = 3
+
+
+def _is_rate_limited(error: LLMError) -> bool:
+    msg = str(error).lower()
+    return any(marker in msg for marker in _RATE_LIMIT_MARKERS)
+
 
 class FailoverLLMClient(LLMClient):
     """Primary with classified retry + backoff, then fallback.
@@ -56,22 +67,33 @@ class FailoverLLMClient(LLMClient):
         json_schema: dict | None = None,
     ) -> LLMResponse:
         last_error: LLMError | None = None
-        for attempt in range(1, _MAX_ATTEMPTS + 1):
+        attempt = 0
+        max_attempts = _MAX_ATTEMPTS
+        while attempt < max_attempts:
+            attempt += 1
             try:
                 return self._call(self.primary, system, messages, json_schema)
             except LLMError as exc:
                 last_error = exc
+                rate_limited = _is_rate_limited(exc)
+                if rate_limited:
+                    max_attempts = _RATE_LIMIT_MAX_ATTEMPTS
                 log.warning(
                     "llm_primary_failed",
                     provider=self.primary.provider,
                     attempt=attempt,
                     retryable=exc.retryable,
+                    rate_limited=rate_limited,
                     error=str(exc)[:300],
                 )
                 if not exc.retryable:
                     break  # retrying cannot help; go to fallback
-                if attempt < _MAX_ATTEMPTS:
-                    time.sleep(_BACKOFF_BASE_SECONDS * attempt + random.uniform(0, 0.5))
+                if attempt < max_attempts:
+                    if rate_limited:
+                        # Sit out the rate-limit window before retrying.
+                        time.sleep(_RATE_LIMIT_BACKOFF_SECONDS + random.uniform(0, 5))
+                    else:
+                        time.sleep(_BACKOFF_BASE_SECONDS * attempt + random.uniform(0, 0.5))
         if self.fallback is not None:
             log.warning(
                 "llm_failover",

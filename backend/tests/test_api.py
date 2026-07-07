@@ -23,12 +23,21 @@ def client():
         app.dependency_overrides.clear()
 
 
-def test_health_without_database(client):
-    r = client.get("/health")
-    assert r.status_code == 200
-    body = r.json()
-    assert body["status"] == "ok"
-    assert body["database"] == "not_configured"
+def test_health_without_database(client, monkeypatch):
+    from app.core.config import get_settings
+
+    # Force the not-configured state regardless of the local .env.
+    monkeypatch.setenv("DATABASE_URL", "")
+    get_settings.cache_clear()
+    try:
+        r = client.get("/health")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["status"] == "ok"
+        assert body["database"] == "not_configured"
+    finally:
+        monkeypatch.delenv("DATABASE_URL", raising=False)
+        get_settings.cache_clear()
 
 
 def test_openapi_lists_all_endpoints(client):

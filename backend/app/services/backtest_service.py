@@ -51,6 +51,17 @@ async def run_backtest(
     if df.empty:
         raise BacktesterError(f"no price history for '{symbol}' in range; ingest data first")
 
+    # Backtest on ADJUSTED prices: raw closes contain corporate-action cliffs
+    # (e.g. RELIANCE's 1:1 bonus in Oct 2024 looks like a -50% crash) that
+    # corrupt signals and equity marks. Scale OHLC by the per-bar adjustment.
+    factor = (df["adj_close"] / df["close"]).fillna(1.0)
+    df = df.assign(
+        open=df["open"] * factor,
+        high=df["high"] * factor,
+        low=df["low"] * factor,
+        close=df["adj_close"],
+    )
+
     config = BacktestConfig(
         strategy=strategy,
         symbol=symbol,

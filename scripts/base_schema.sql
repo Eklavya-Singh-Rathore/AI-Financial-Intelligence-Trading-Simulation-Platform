@@ -36,7 +36,13 @@ CREATE TABLE IF NOT EXISTS exchanges (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     code VARCHAR NOT NULL UNIQUE,
-    name VARCHAR NOT NULL
+    mic VARCHAR,
+    name VARCHAR NOT NULL,
+    country VARCHAR NOT NULL,
+    timezone VARCHAR NOT NULL,
+    currency VARCHAR NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    calendar_id UUID
 );
 
 CREATE TABLE IF NOT EXISTS instruments (

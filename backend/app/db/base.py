@@ -88,9 +88,14 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def dispose_engine() -> None:
-    """Dispose the engine (call on application shutdown)."""
+    """Dispose the engine (call on application shutdown).
+
+    Globals are cleared FIRST so a failed cross-event-loop disposal (as seen in
+    per-test loops under pytest-asyncio) can never leave a stale engine behind.
+    """
     global _engine, _sessionmaker
-    if _engine is not None:
-        await _engine.dispose()
+    engine = _engine
     _engine = None
     _sessionmaker = None
+    if engine is not None:
+        await engine.dispose()
