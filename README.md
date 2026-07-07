@@ -31,7 +31,9 @@ suite that runs in CI against a bootstrapped Postgres
 | News/sentiment feed (NewsAPI) | ✅ (live-verified) |
 | Multi-agent pipeline (analysts → debate → trader → risk → PM) | ✅ |
 | Semantic memory (MiniLM 384 + pgvector `agent_embeddings`) | ✅ |
-| Chat UI, dashboard frontend | Phase 3 (not started) |
+| Web dashboard (Next.js 15): universe table, candle charts + forecast overlay, backtest UI | ✅ live-verified |
+| Agent-run UI (live-polling transcript + decision card) | ✅ |
+| Chat UI (persisted sessions, grounded answers, context chips) | ✅ live-verified |
 
 ### Agents API
 
@@ -117,6 +119,20 @@ The Kronos runtime classes are not on PyPI. Copy `model/__init__.py`,
 `backend/app/ml/kronos_src/`. Weights download automatically from Hugging Face
 (`NeoQuasar/Kronos-small` + `NeoQuasar/Kronos-Tokenizer-base`) on first use.
 Until then, `model=baseline` works and `model=kronos` returns a clear 503.
+
+### Frontend (Phase 3)
+
+```bash
+cd frontend
+npm install
+cp .env.example .env.local    # BACKEND_URL + BACKEND_API_KEY (server-side only)
+npm run dev                   # http://localhost:3000 (backend must run on :8000)
+```
+
+Next.js 15 (App Router, TS) + Tailwind v4 + TanStack Query + TradingView
+lightweight-charts + next-themes (system-adaptive light/dark). All API calls go
+through the authenticated same-origin proxy at `app/api/backend/[...path]` —
+the backend API key never reaches the browser.
 
 ## Development
 

@@ -2,8 +2,20 @@
 
 > **Single source of truth for resuming development.** Complete enough that a
 > new engineer or AI assistant can continue without prior conversations.
-> Last updated: **2026-07-07** — Phase 2.5 (hardening & audit remediation) complete;
-> Kronos forecaster vendored and verified end-to-end.
+> Last updated: **2026-07-07** — **Phase 3 complete**: live runtime verification
+> (11,844 real bars, live Kronos forecast, live Nautilus backtest, first completed
+> live agent run), universe-summary + persisted-chat/RAG backend, and the Next.js
+> frontend (dashboard, instrument charts w/ forecast overlay + backtest UI,
+> agent-run transcripts, chat) — all live-verified in the browser against Supabase.
+>
+> **Frontend:** `frontend/` — Next.js 15 + Tailwind v4 + TanStack Query +
+> lightweight-charts + next-themes; authenticated proxy at
+> `app/api/backend/[...path]` (key server-side only); `npm run dev` on :3000 with
+> uvicorn on :8000. Dataviz palettes validated for both themes. CI has a frontend
+> job (typecheck + build). Chat/summary endpoints documented in README.
+> **Remaining for Phase 4:** real auth + roles, notifications, deployment
+> (backend container host + Vercel frontend), job queue, funded OpenAI fallback,
+> GitHub remote/CI activation, pre-deploy key rotation + DB roles (§10).
 
 ## 1. Project overview
 
