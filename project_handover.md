@@ -1,229 +1,120 @@
 # project_handover.md
 
-> **Single source of truth for resuming development.** Complete enough that a
-> new engineer or AI assistant can continue without prior conversations.
-> Last updated: **2026-07-07** — **Phase 3 complete**: live runtime verification
-> (11,844 real bars, live Kronos forecast, live Nautilus backtest, first completed
-> live agent run), universe-summary + persisted-chat/RAG backend, and the Next.js
-> frontend (dashboard, instrument charts w/ forecast overlay + backtest UI,
-> agent-run transcripts, chat) — all live-verified in the browser against Supabase.
->
-> **Frontend:** `frontend/` — Next.js 15 + Tailwind v4 + TanStack Query +
-> lightweight-charts + next-themes; authenticated proxy at
-> `app/api/backend/[...path]` (key server-side only); `npm run dev` on :3000 with
-> uvicorn on :8000. Dataviz palettes validated for both themes. CI has a frontend
-> job (typecheck + build). Chat/summary endpoints documented in README.
-> **Remaining for Phase 4:** real auth + roles, notifications, deployment
-> (backend container host + Vercel frontend), job queue, funded OpenAI fallback,
-> GitHub remote/CI activation, pre-deploy key rotation + DB roles (§10).
+> **Single source of truth for resuming development** — self-contained; no prior
+> conversations needed. Last updated: **2026-07-08, Phase 4 complete**
+> (production auth, multi-user isolation, deployment).
 
-## 1. Project overview
+## 1. What this is
 
-**AI Financial Intelligence Platform** — decision-support system (NO real
-trading) for a fixed 16-asset Indian-market universe (NIFTY 50, Sensex,
-gold/silver ETFs, 12 NSE blue-chips). It ingests daily OHLCV, computes
-technical indicators, forecasts prices, backtests strategies on NautilusTrader,
-and runs a multi-agent LLM pipeline that produces an explainable, risk-limited
-trade recommendation.
+**AI Financial Intelligence Trading Simulation Platform** — decision-support
+(NO real trading) for a fixed 16-asset Indian-market universe (NIFTY 50, Sensex,
+gold/silver ETFs, 12 NSE blue-chips). Ingests daily OHLCV, computes indicators,
+forecasts with the vendored **Kronos** foundation model, backtests on
+**NautilusTrader**, runs a 7-agent LLM pipeline (Gemini) producing risk-limited
+recommendations, and serves a **multi-user** Next.js dashboard + grounded chat.
 
-- **Working directory:** `D:\Claude Sessions\Stock` (backend in `backend/`, local git repo, branch `main`)
-- **Database:** Supabase project **`ai-stock-prediction`** (ref `rekoawsoghrjcimknkfz`, region ap-south-1, Postgres 17)
-- **Original planning doc:** `deep-research-report (1).md` (git-ignored — contains development API keys)
-- **Audit:** `AUDIT_REPORT.md` (2026-07-07, score 57/100 pre-hardening; authoritative issue list)
+- Repo: https://github.com/Eklavya-Singh-Rathore/AI-Financial-Intelligence-Trading-Simulation-Platform
+- DB/Auth: Supabase **`ai-stock-prediction`** (`rekoawsoghrjcimknkfz`, ap-south-1, PG 17)
+- Docs: `README.md`, `AUDIT_REPORT.md` (historical audit), `docs/deploy-oracle.md`
+- **Notifications are permanently out of scope** (owner decision, Phase 4).
 
-## 2. Completed phases
+## 2. Phase history (commits on `main`)
 
-| Phase | Content | Commit(s) |
+| Phase | Commits | Delivered |
 |---|---|---|
-| 1 | FastAPI backend, ingestion→`price_bars`, indicators, Forecaster/Backtester registries (baseline + NautilusTrader 1.230), APScheduler, migrations 0004-baseline/0005, CI, Docker | `a6b86d5`, `71aa32a` |
-| 2 | Multi-agent system: LLM layer (Gemini primary/OpenAI fallback/fake), TradingAgents-inspired pipeline, NewsAPI, MiniLM semantic memory, agents API, migration 0006 | `fa9f49d` |
-| 2.5 | **Engineering hardening — every applicable audit finding remediated** (this update) | working tree |
+| 1 | `a6b86d5`,`71aa32a` | FastAPI core, yfinance→`price_bars` ingestion, indicators, Forecaster/Backtester registries, APScheduler, migrations 0004-baseline/0005, CI, Docker |
+| 2 | `fa9f49d` | LLM layer (Gemini primary/OpenAI fallback/fake), 7-agent TradingAgents-style pipeline w/ coded hard risk limits, NewsAPI, MiniLM semantic memory (`agent_embeddings`, 384-d), agents API, migration 0006 |
+| 2.5 | `7e8fc60` | Full audit remediation: API-key auth, rate limiting, run concurrency caps + timeouts + orphan sweep, CPU work off event loop, rollback discipline, failover normalization + rate-limit backoff, pooler-safe asyncpg, requirements.lock, hardened non-root Docker, Prometheus metrics + request IDs, prompt trust boundaries, fail-closed risk, migration 0007, DB-integration suite + `scripts/base_schema.sql` |
+| Kronos | `a284557` | Vendored `app/ml/kronos_src/` (MIT; one relative-import fix); `model=kronos` verified live |
+| 3 | `9b0aeed`,`89b478b`,`a0c3976`,`95c2034` | **First live verification** (11,844 bars, live Kronos forecast, live Nautilus backtest, first completed agent run — drawdown veto fired) + 5 live-found bug fixes (enums, cash-vs-equity drawdown, adjusted prices, 429 backoff, ORM-after-rollback); `/instruments/summary`; persisted chat + RAG (migration 0008); Next.js frontend (dashboard/candles+forecast overlay/backtest UI/agent transcripts/chat), auth proxy, both themes, dataviz-validated palettes |
+| 4 | this phase | **Supabase Auth + JWT + RBAC + per-user isolation** (migration 0009), open sign-up, login UI + session middleware, GitHub push, Vercel frontend deploy, Oracle backend runbook |
 
-## 3. Audit remediation status (Phase 2.5)
+## 3. Architecture (stable since audit)
 
-**Implemented (Code/Config fixes):**
+`api/routers` → `services` → (`ml` | `backtesting` | `llm` | `agents`) →
+`models`/`db` (async SQLAlchemy → Supabase). Registries select implementations.
+Agent pipeline: deterministic gather → technical + news analysts → bull/bear
+debate → trader → risk manager (**coded limits only tighten**: size cap,
+drawdown veto, missing-evidence halving) → portfolio manager; every step
+persisted (`agent_messages`), memory embedded for RAG recall. Chat grounds
+answers in live stats + recent decisions + semantic memory inside
+`<untrusted-data>` boundaries. Frontend (Next.js 15) reaches the backend only
+through `app/api/backend/[...path]` which forwards the user's Supabase Bearer
+token (or `BACKEND_API_KEY` in local dev).
 
-| Audit ID | Fix | Where |
-|---|---|---|
-| CRIT-1 | X-API-Key auth on all business routes (+`/api/v1` alias), fixed-window per-IP rate limiting, startup warning when auth disabled | `app/core/security.py`, `app/main.py` |
-| CRIT-2 | All CPU/model work off the event loop via `asyncio.to_thread` (Nautilus run, forecaster inference, MiniLM encode/load) | `services/backtest_service.py`, `services/forecast_service.py`, `services/embeddings.py` |
-| HIGH-1 | Whole provider interaction normalized to `LLMError` (incl. `.text`/`.choices` access); failover normalizes foreign exceptions | `app/llm/gemini_client.py`, `openai_client.py`, `registry.py` |
-| HIGH-2 | `session.rollback()` in ingest error path (poisoned-session cascade fixed) | `services/data_ingest.py` |
-| HIGH-3 | Failure path rolls back (fresh-session fallback), per-run `asyncio.wait_for` timeout, startup `sweep_orphaned_runs()` | `agents/orchestrator.py`, `app/main.py` |
-| HIGH-4 | Concurrency guard (429), per-symbol in-flight dedup (409) | `api/routers/agents.py` |
-| HIGH-5 | Least-privilege DB roles documented (infra step — see §10) | `.env.example`, this file |
-| HIGH-6 | Pooler auto-detect → asyncpg `statement_cache_size=0`; `DB_STATEMENT_CACHE_SIZE` override | `app/db/base.py` |
-| HIGH-7 | `backend/requirements.lock` (112 pins, pip-freeze), CI installs from lock, Dependabot, bandit (blocking) + pip-audit (advisory) in CI | `requirements.lock`, `.github/*` |
-| HIGH-8 | `.dockerignore`, explicit COPY, pinned install, non-root `appuser`, HEALTHCHECK on `/live` | `backend/Dockerfile`, `backend/.dockerignore` |
-| MED-1 | Headlines/memory rendered in `<untrusted-data>` trust boundaries, delimiter-injection stripped, preamble rule | `agents/context.py`, `agents/base.py` |
-| MED-2 | Risk fails CLOSED: missing backtest evidence → size halved + `missing_evidence` flag | `agents/risk.py` |
-| MED-3 | Run errors sanitized unless `EXPOSE_ERROR_DETAILS=true` (curated messages pass) | `api/routers/agents.py` |
-| MED-4 | Ingest mutex (409 on concurrent) + `background=true` mode (202-style) | `api/routers/ingest.py` |
-| MED-5 | Postgres advisory lock makes the daily job single-flight across replicas | `scheduler/jobs.py` |
-| MED-6 | DB-integration suite (`tests/test_db_integration.py`, `db` marker) + CI Postgres job | `.github/workflows/ci.yml` |
-| MED-7 | Request-ID middleware (structlog-bound, echoed header), `exc_info=True` logging, Prometheus `/metrics` + run/token/duration metrics | `core/middleware.py`, `core/metrics.py`, `main.py` |
-| MED-8 | `scripts/base_schema.sql` bootstrap (CI + compose auto-load) + 0005 precondition guard with clear error | `scripts/`, `alembic/versions/0005*` |
-| MED-9 | `/api/v1` dual mount (non-breaking) + `Idempotency-Key` on `POST /agents/run` (DB-backed, unique index) | `main.py`, `api/routers/agents.py`, migration 0007 |
-| MED-10 | Retry classification (`LLMError.retryable`), backoff+jitter, non-retryable skips straight to fallback | `app/llm/base.py`, `registry.py` |
-| LOW-1 | NewsAPI key moved to `X-Api-Key` header | `services/news.py` |
-| LOW-2 | Memory search symbol-partitioned (join via runs), TTL purge (`MEMORY_TTL_DAYS`, on startup sweep), DB unique dedupe index | `services/embeddings.py`, migration 0007 |
-| LOW-3 | CORS configurable via `CORS_ORIGINS` (empty = off) | `main.py` |
-| LOW-4 | `/prices` bounded (`limit` param, default 10 000, most-recent kept) | `api/routers/instruments.py` |
-| LOW-5 | Typed `SmaCrossoverParams` (same JSON shape; validates at the boundary) | `schemas/backtest.py` |
-| LOW-7 | Per-hit UUID guard in memory recall | `agents/orchestrator.py` |
-| LOW-8 | `/live` (no deps) added; `/health` remains readiness | `main.py` |
+## 4. Auth model (Phase 4)
 
-**Deferred (with reasons):**
+- **Users:** Supabase Auth, email+password, **open sign-up**; session in cookies
+  (@supabase/ssr); `middleware.ts` redirects signed-out visitors to `/login`.
+- **Backend** (`app/core/auth.py` → `get_auth` on every business route):
+  `X-API-Key` = `service` role (admin-equivalent, automation/dev);
+  `Bearer <jwt>` verified locally (HS256, `SUPABASE_JWT_SECRET`) or remotely
+  (`/auth/v1/user`, 60s cache) — deploy never blocks on the JWT secret.
+- **Roles:** JWT `app_metadata.role`; a `BEFORE INSERT` trigger on `auth.users`
+  (`public.grant_admin_role`, migration 0009) grants **admin** to
+  `esr.arsenal.07@gmail.com` and `rathore.eklavya72@gmail.com` at sign-up.
+- **Isolation:** `user_id` on `chat_sessions`, `agent_runs`, `backtests`,
+  `forecasts`. Non-privileged queries filter by owner; cross-user access → 404;
+  legacy NULL rows visible to admin/service only. **Live-verified** with two
+  seeded users (A/B could not see each other's data; deleted after).
 
-| Item | Reason | Dependency | Recommended phase |
-|---|---|---|---|
-| Real authn/z (JWT/Supabase Auth, roles, per-user quotas) | Needs identity design + user store; API-key stopgap in place | Product decision | Phase 4 (per roadmap) |
-| Job queue replacing BackgroundTasks | Architectural change explicitly out of Phase 2.5 scope | Queue choice (PG-backed vs Redis) | Phase 3/4 |
-| Least-privilege DB roles (HIGH-5 execution) | Requires DBA action on Supabase; SQL documented in §10 | Owner/DBA | Before production |
-| Prompt registry/versioning (TD-5) | Improvement, not an audit defect | — | Phase 3 |
-| LOW-6 dual migration bookkeeping | Process discipline, documented in §7 | — | ongoing |
+## 5. Database
 
-## 4. Architecture (unchanged by 2.5 — hardened in place)
+Alembic head **`0009_user_ownership`** (all migrations applied to Supabase via
+MCP with `alembic_version` stamped in lockstep). Project-owned tables:
+`forecasts`, `backtests`, `agent_runs`(+idempotency_key), `agent_messages`,
+`chat_sessions`, `chat_messages` (+`user_id` on the four owned tables). Adopted
+pre-existing: `instruments` (16), `price_bars` (**11,844 real bars**),
+`data_providers`, `instrument_provider_mappings` (TATAMOTORS→`TMPV.NS`
+post-demerger), `exchanges/...`, `agent_embeddings`. Fresh-DB bootstrap:
+`scripts/base_schema.sql` (CI + compose auto-load; 0005 guards with a clear
+error).
 
-Modular monolith. `api/routers` → `services` → (`ml` | `backtesting` | `llm` |
-`agents`) → `models`/`db`. Registries select implementations
-(forecaster: kronos/baseline; backtester: nautilus/simple; LLM:
-gemini/openai/fake with failover). The agent pipeline gathers all data
-deterministically, then: technical analyst → news analyst → bull/bear debate →
-trader → risk manager (LLM + **coded hard limits that only tighten**) →
-portfolio manager. Every step persisted to `agent_messages`; final decision +
-token usage on `agent_runs`.
+## 6. Status snapshot
 
-## 5. Technology stack
+- **Backend:** all endpoints live-verified incl. auth matrix; `/api/v1` + legacy
+  mounts; metrics `/metrics`; probes `/live` `/health`.
+- **AI:** Gemini `gemini-2.5-flash` live (free tier — 429s absorbed by 35s
+  backoff); OpenAI fallback key has **no quota** (dead until funded); Kronos +
+  Nautilus verified on real data; RAG chat live-verified.
+- **Tests:** 106 fast + 7 db-marked (incl. isolation) + 4 slow — all green;
+  ruff/mypy/bandit clean; frontend `tsc`+`next build` clean.
+- **CI:** backend / integration-Postgres / frontend / docker jobs (first remote
+  run happens on GitHub push).
+- **Frontend:** login/sign-up, session guard, dashboard, instrument detail
+  (candles+forecast+backtest), agent transcripts, chat — verified in browser.
 
-Python 3.12 · FastAPI 0.139 · SQLAlchemy 2 async + asyncpg · Alembic ·
-Supabase Postgres 17 + pgvector 0.8 · pandas 3 / numpy 2.5 · nautilus_trader
-1.230 · torch 2.12 · sentence-transformers (MiniLM-L6-v2, 384-dim) ·
-google-genai (gemini-2.5-flash) · openai (gpt-4o-mini fallback) ·
-prometheus-fastapi-instrumentator · structlog · APScheduler · pytest/ruff/mypy.
-**All pinned in `backend/requirements.lock`.**
+## 7. Deployment
 
-## 6. API status
+- **Frontend → Vercel** (root `frontend/`). Env: `NEXT_PUBLIC_SUPABASE_URL`,
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `BACKEND_URL` (set once backend is hosted;
+  leave `BACKEND_API_KEY` empty in production).
+- **Backend → Oracle Cloud VM** (owner provides credentials later): full
+  runbook `docs/deploy-oracle.md` + `infrastructure/docker-compose.prod.yml`
+  (API behind Caddy auto-HTTPS; A1 ARM Always-Free shape fits — aarch64 wheels).
+  Post-deploy: set Vercel `BACKEND_URL`, set backend `CORS_ORIGINS` to the
+  Vercel URL.
+- Local dev: uvicorn :8000 + `npm run dev` :3000 (`.claude/launch.json`).
 
-Mounted at `/` (legacy) and `/api/v1` (canonical). API-key protected when
-`API_KEY` set; `/live`, `/health`, docs always open.
+## 8. Security posture & owner actions before production
 
-- `GET /live`, `GET /health`, `GET /metrics`
-- `GET /instruments`, `GET /instruments/{s}/prices?limit=`, `.../indicators`, `.../forecast`
-- `POST /ingest/run` (mutex; `background=true` supported)
-- `POST /backtest` (typed params)
-- `POST /agents/run` (202; `Idempotency-Key`; 409 in-flight dup; 429 at cap),
-  `GET /agents/runs`, `GET /agents/runs/{id}`, `GET /agents/runs/{id}/messages`
+1. **Rotate ALL dev credentials** (shared during development, compromised by
+   definition): Supabase **DB password**, `GOOGLE_AI_STUDIO_API_KEY`,
+   `OPENAI_API_KEY`, `NEWSAPI_KEY`, `ALPHA_VANTAGE_KEY`. Anon key is public by
+   design.
+2. Create least-privilege DB role (replace `postgres` app connection):
+   `CREATE ROLE app_rw LOGIN PASSWORD '...'; GRANT SELECT,INSERT,UPDATE,DELETE
+   ON price_bars,forecasts,backtests,agent_runs,agent_messages,chat_sessions,
+   chat_messages,agent_embeddings TO app_rw; GRANT SELECT ON instruments,
+   data_providers,instrument_provider_mappings,exchanges TO app_rw;`
+3. Optional: paste `SUPABASE_JWT_SECRET` into backend env (faster local JWT
+   verification). 4. Fund the OpenAI key or clear `LLM_FALLBACK_PROVIDER`.
+5. Rate limiting + agent-run caps are ON; `EXPOSE_ERROR_DETAILS=false` in prod.
 
-## 7. Database status
+## 9. Phase 5 roadmap (next)
 
-- Alembic head **`0007_hardening`** — applied to Supabase (0005, 0006, 0007 all
-  applied via Supabase MCP; `alembic_version` stamped in lockstep — keep both
-  bookkeeping systems in sync when applying DDL outside Alembic).
-- Project-owned tables: `forecasts`, `backtests`, `agent_runs`
-  (+`idempotency_key` unique), `agent_messages`; RLS enabled on all.
-- Pre-existing base schema (prior repo): `instruments` (16 seeded),
-  `price_bars`, `data_providers`, `instrument_provider_mappings`,
-  `exchanges/sectors/industries`, `agent_embeddings` (+ new dedupe unique
-  index), `warehouse_*`.
-- Fresh-DB bootstrap: `scripts/base_schema.sql` (CI service container and
-  docker-compose load it automatically; 0005 guards with a clear error if the
-  base schema is missing).
-
-## 8. AI/Agent status
-
-- Gemini (`gemini-2.5-flash`) **live-verified**; OpenAI fallback key has **no
-  quota (429 insufficient_quota)** — failover logic tested with fakes; supply a
-  funded key for a working fallback.
-- NewsAPI **live-verified** (headlines flow; key now sent via header).
-- Semantic memory: symbol-partitioned recall, TTL purge, dedupe index; MiniLM
-  loads lazily off the event loop; memory-off degradation preserved.
-- Kronos forecaster: **vendored and working end-to-end** (2026-07-07). Source
-  under `app/ml/kronos_src/model/` (github.com/shiyu-coder/Kronos, MIT — see
-  `kronos_src/NOTICE.md`; one local change: relative-import fix). Weights pull
-  from HF (`NeoQuasar/Kronos-small` + `-Tokenizer-base`) on first use, cached
-  after. Verified: a real CPU forecast returns 5 predictions in ~23 s (cold).
-  `model=kronos` is the default forecaster; baseline remains the automatic
-  fallback if the model can't load. Slow-marked test:
-  `test_kronos_forecast_end_to_end`.
-
-## 9. Testing status
-
-- **89 fast tests** (unit; network/DB-free; ~1 s) + **7 DB-integration tests**
-  (`-m db`; CI Postgres job bootstraps base schema + migrations; cover
-  migration presence, upsert idempotency, HIGH-2 session recovery, full
-  fake-LLM pipeline vs real DB, orphan sweep, idempotency-key replay) + 3
-  slow-marked local tests (Nautilus e2e, MiniLM dims, kronos gating).
-- ruff clean, mypy clean (68 files), bandit in CI (blocking, `-ll`), pip-audit
-  advisory.
-- **Unable to verify locally:** the `db`/CI jobs (no Docker locally, repo has
-  no GitHub remote yet, and `DATABASE_URL` is empty) — they are written to run
-  green in CI; first push will prove them.
-
-## 10. Security status
-
-- API key auth + rate limiting + concurrency caps: **in place** (set `API_KEY`!).
-- Error sanitization, request-IDs, non-root container, pinned deps: in place.
-- **Before any deployment (owner actions):**
-  1. **Rotate every key** in `.env` / the planning doc (all were shared for dev).
-  2. Create least-privilege DB roles (HIGH-5):
-     `CREATE ROLE app_rw LOGIN PASSWORD '...'; GRANT SELECT,INSERT,UPDATE,DELETE ON
-     price_bars, forecasts, backtests, agent_runs, agent_messages, agent_embeddings TO app_rw;
-     GRANT SELECT ON instruments, data_providers, instrument_provider_mappings, exchanges TO app_rw;`
-     — app uses `app_rw`, migrations keep an elevated role.
-  3. Supply a funded OpenAI key (or disable fallback).
-  4. Confirm Supabase backup/PITR posture (**Unable to verify from code**).
-
-## 11. Deployment status
-
-Not deployed. Docker image hardened; compose stack now self-bootstraps a local
-DB. Backend needs a container host (Fly/Render/Cloud Run/ECS) — it does NOT fit
-Vercel serverless (torch + nautilus + scheduler). No GitHub remote configured;
-CI exists but has never run remotely.
-
-## 12. Milestones
-
-- **Current:** Phase 2.5 complete — all applicable audit findings remediated;
-  production readiness gates reduced to: runtime verification (needs
-  `DATABASE_URL`), key rotation, DB roles, first CI run, Kronos vendoring
-  (optional).
-- **Next recommended:** Runtime verification end-to-end against Supabase, then
-  **Phase 3** — Next.js dashboard + chat interface (Vercel), CORS origins,
-  SSE/polling on run progress; queue extraction when adding scheduled
-  autonomous runs.
-
-## 13. Runtime verification — DONE (2026-07-07, Phase 3 step 0)
-
-`DATABASE_URL` supplied by owner and wired into `.env`. First live results:
-- **Ingest:** 16/16 instruments, **11,844 bars** (3y daily). TATAMOTORS demerger
-  handled: yfinance mapping updated to successor **TMPV.NS** (registry data fix).
-- **Read path:** prices + indicators live; **Kronos forecast on real data** works;
-  **NautilusTrader backtest** works (RELIANCE 10/30 SMA: −4.77%, maxDD −28.2%).
-- **First live agent run COMPLETED** (TCS, 7 Gemini calls, 12k tokens): decision
-  `HOLD 0%` via **drawdown_veto** — the coded risk limits fired in production.
-- `pytest -m db` green against Supabase (4 passed, 2 fake-LLM skips).
-
-**Bugs found & fixed by live verification** (the audit's "unable to verify" was right):
-1. `Instrument.status/instrument_type` mapped as String vs PG enum → asyncpg
-   `operator does not exist` (fixed: ENUM(create_type=False)).
-2. Nautilus drawdown/Sharpe measured CASH not equity (−96% fake DD) → replaced
-   with mark-to-market equity curve from fills × bar closes.
-3. Backtests ran on RAW prices → corporate-action cliffs (RELIANCE 1:1 bonus)
-   corrupted results; backtests now use adjusted OHLC.
-4. Gemini free-tier 429 mid-pipeline with useless 1.5s retry → rate-limit-aware
-   backoff (35s+, extra attempt) in the failover client.
-5. ORM access after rollback in ingest error path → MissingGreenlet cascade
-   (ingest loop now uses plain values snapshot).
-
-## Outstanding prerequisites
-
-1. **Funded OpenAI key** for a real fallback provider (optional; Gemini free
-   tier is tight — a paid tier would remove 429 stalls).
-2. **GitHub remote + first push** to activate CI.
-
-## 14. Future roadmap
-
-Phase 3: frontend + chat (LibreChat-inspired), run-progress streaming.
-Phase 4: real auth (Supabase Auth/JWT, roles), notifications, job queue.
-Phase 5: multi-user/multi-tenant (tenant columns + forced RLS policies),
-evaluation harness for agent decision quality, model-serving isolation.
+Job queue replacing BackgroundTasks (durable runs) · per-user LLM quotas ·
+scheduled autonomous runs (needs queue + alerting) · prompt registry/versioning ·
+agent-quality evaluation harness · additional data APIs (Twitter/X etc. — the
+production URL from Vercel is the OAuth callback base) · multi-tenant RLS
+policies if SaaS ever pursued. *(Notifications: permanently removed.)*

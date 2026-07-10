@@ -1,10 +1,25 @@
 // Authenticated proxy to the FastAPI backend. The browser calls same-origin
-// /api/backend/*; this handler forwards to BACKEND_URL adding X-API-Key from
-// the server environment - the key never reaches the client.
+// /api/backend/*; this handler forwards the signed-in user's Supabase access
+// token as a Bearer header (Phase 4), falling back to the server-side
+// X-API-Key for local development. Credentials never reach the client.
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 
 const BACKEND_URL = process.env.BACKEND_URL ?? "http://127.0.0.1:8000";
 const API_KEY = process.env.BACKEND_API_KEY ?? "";
+
+async function userAccessToken(): Promise<string | null> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !anon) return null;
+  const store = await cookies();
+  const supabase = createServerClient(url, anon, {
+    cookies: { getAll: () => store.getAll(), setAll: () => {} },
+  });
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token ?? null;
+}
 
 async function proxy(req: NextRequest, path: string[]): Promise<NextResponse> {
   const url = new URL(`${BACKEND_URL}/${path.join("/")}`);
@@ -15,7 +30,13 @@ async function proxy(req: NextRequest, path: string[]): Promise<NextResponse> {
   if (contentType) headers["content-type"] = contentType;
   const idem = req.headers.get("idempotency-key");
   if (idem) headers["idempotency-key"] = idem;
-  if (API_KEY) headers["x-api-key"] = API_KEY;
+
+  const token = await userAccessToken();
+  if (token) {
+    headers["authorization"] = `Bearer ${token}`;
+  } else if (API_KEY) {
+    headers["x-api-key"] = API_KEY; // local-dev fallback only
+  }
 
   const body =
     req.method === "GET" || req.method === "HEAD" ? undefined : await req.text();

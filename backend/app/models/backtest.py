@@ -23,6 +23,7 @@ class Backtest(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
     )
+    user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     strategy_name: Mapped[str] = mapped_column(String(64), nullable=False)
     engine: Mapped[str] = mapped_column(String(32), nullable=False, server_default="nautilus")
     symbols: Mapped[list] = mapped_column(JSONB, nullable=False)

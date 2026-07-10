@@ -14,10 +14,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.routers import agents, backtest, chat, health, ingest, instruments
+from app.core.auth import get_auth, warn_if_user_auth_disabled
 from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.core.middleware import RequestIDMiddleware
-from app.core.security import RateLimitMiddleware, require_api_key, warn_if_auth_disabled
+from app.core.security import RateLimitMiddleware, warn_if_auth_disabled
 from app.db.base import dispose_engine
 from app.scheduler.jobs import start_scheduler, stop_scheduler
 
@@ -30,6 +31,7 @@ async def lifespan(app: FastAPI):
     configure_logging(settings.log_level)
     log.info("app_starting", env=settings.env, database_configured=settings.database_configured)
     warn_if_auth_disabled()
+    warn_if_user_auth_disabled()
     if settings.database_configured:
         # Recover runs stranded by a previous crash/restart before serving.
         from app.agents.orchestrator import sweep_orphaned_runs
@@ -74,8 +76,9 @@ if _cors:
 
 # Protected business routers, mounted at both the legacy root and /api/v1.
 # The root mount is kept for backward compatibility; /api/v1 is canonical.
+# get_auth accepts EITHER the service X-API-Key OR a Supabase user JWT (Phase 4).
 _PROTECTED = [instruments.router, ingest.router, backtest.router, agents.router, chat.router]
-_auth = [Depends(require_api_key)]
+_auth = [Depends(get_auth)]
 for router in _PROTECTED:
     app.include_router(router, dependencies=_auth)
     app.include_router(router, prefix="/api/v1", dependencies=_auth, include_in_schema=False)

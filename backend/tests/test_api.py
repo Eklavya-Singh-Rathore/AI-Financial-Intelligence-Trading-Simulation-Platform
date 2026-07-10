@@ -14,13 +14,22 @@ async def _null_session():
 
 
 @pytest.fixture
-def client():
+def client(monkeypatch):
+    # Hermetic premise: NO auth configured (the local .env may set Supabase auth).
+    from app.core.config import get_settings
+
+    for key in ("API_KEY", "SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_JWT_SECRET"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("SUPABASE_URL", "")
+    monkeypatch.setenv("SUPABASE_ANON_KEY", "")
+    get_settings.cache_clear()
     app.dependency_overrides[get_session] = _null_session
     try:
         with TestClient(app) as c:
             yield c
     finally:
         app.dependency_overrides.clear()
+        get_settings.cache_clear()
 
 
 def test_health_without_database(client, monkeypatch):

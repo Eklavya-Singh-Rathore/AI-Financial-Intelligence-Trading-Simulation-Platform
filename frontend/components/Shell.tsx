@@ -1,13 +1,22 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Bot, CandlestickChart, LayoutDashboard, MessageSquare, Moon, Sun } from "lucide-react";
+import {
+  Bot,
+  CandlestickChart,
+  LayoutDashboard,
+  LogOut,
+  MessageSquare,
+  Moon,
+  Sun,
+} from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import clsx from "clsx";
 import { api } from "@/lib/api";
+import { authConfigured, supabaseBrowser } from "@/lib/supabase";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -47,8 +56,41 @@ function HealthDot() {
   );
 }
 
+function UserBox() {
+  const router = useRouter();
+  const [email, setEmail] = useState<string | null>(null);
+  useEffect(() => {
+    if (!authConfigured()) return;
+    supabaseBrowser()
+      .auth.getUser()
+      .then(({ data }) => setEmail(data.user?.email ?? null));
+  }, []);
+  if (!authConfigured() || !email) return null;
+  const signOut = async () => {
+    await supabaseBrowser().auth.signOut();
+    router.push("/login");
+    router.refresh();
+  };
+  return (
+    <div className="mb-3 flex items-center justify-between gap-2 border-t border-line pt-3">
+      <span className="truncate text-xs text-ink-3" title={email}>{email}</span>
+      <button
+        aria-label="Sign out"
+        onClick={signOut}
+        className="text-ink-3 hover:text-loss"
+        title="Sign out"
+      >
+        <LogOut size={14} />
+      </button>
+    </div>
+  );
+}
+
 export function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  if (pathname.startsWith("/login")) {
+    return <main className="min-h-screen p-6">{children}</main>;
+  }
   return (
     <div className="flex min-h-screen">
       <aside className="flex w-52 shrink-0 flex-col border-r border-line bg-surface-2 p-4">
@@ -74,9 +116,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
             );
           })}
         </nav>
-        <div className="mt-auto flex items-center justify-between pt-4">
-          <HealthDot />
-          <ThemeToggle />
+        <div className="mt-auto pt-4">
+          <UserBox />
+          <div className="flex items-center justify-between">
+            <HealthDot />
+            <ThemeToggle />
+          </div>
         </div>
       </aside>
       <main className="min-w-0 flex-1 p-6">{children}</main>

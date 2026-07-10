@@ -1,0 +1,45 @@
+# Production backend stack for a single VM (Oracle Cloud or any Docker host).
+#
+#   docker compose -f infrastructure/docker-compose.prod.yml up -d --build
+#
+# Caddy terminates TLS automatically (Let's Encrypt) for BACKEND_DOMAIN and
+# reverse-proxies to the FastAPI container. The database is Supabase (managed);
+# nothing stateful runs here. See docs/deploy-oracle.md for the full runbook.
+
+services:
+  backend:
+    build: ../backend
+    restart: unless-stopped
+    env_file:
+      - ../.env.production   # copy .env.example -> .env.production on the VM
+    environment:
+      ENV: production
+      EXPOSE_ERROR_DETAILS: "false"
+      ENABLE_SCHEDULER: "true"
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/live', timeout=4).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      BACKEND_DOMAIN: ${BACKEND_DOMAIN:?set BACKEND_DOMAIN, e.g. api.example.com}
+    command: caddy reverse-proxy --from ${BACKEND_DOMAIN} --to backend:8000
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  caddy_data:
+  caddy_config:

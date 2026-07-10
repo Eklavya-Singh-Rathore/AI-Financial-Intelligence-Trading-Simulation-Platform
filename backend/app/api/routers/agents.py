@@ -18,6 +18,7 @@ Hardening (Phase 2.5):
 from __future__ import annotations
 
 import uuid
+from typing import Annotated
 
 import structlog
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
@@ -26,6 +27,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.orchestrator import execute_run
+from app.core.auth import AuthContext, get_auth
 from app.core.config import get_settings
 from app.db.base import get_session, get_sessionmaker
 from app.models.agent_run import AgentMessage, AgentRun
@@ -35,6 +37,8 @@ from app.services import market_data
 log = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/agents", tags=["agents"])
+
+Auth = Annotated[AuthContext, Depends(get_auth)]
 
 # Error prefixes safe to show callers even with detail exposure off (curated,
 # operator-authored strings - never raw exception text).
@@ -86,6 +90,7 @@ async def _execute_in_background(run_id: uuid.UUID) -> None:
 async def start_run(
     body: AgentRunRequest,
     background: BackgroundTasks,
+    auth: Auth,
     session: AsyncSession = Depends(get_session),
     idempotency_key: str | None = Header(
         default=None,
@@ -94,13 +99,12 @@ async def start_run(
         description="Repeat POSTs with the same key return the same run.",
     ),
 ) -> AgentRunOut:
-    # Idempotent replay: return the existing run for this key.
+    # Idempotent replay: return the existing run for this key (owner-scoped).
     if idempotency_key:
-        existing = (
-            await session.execute(
-                select(AgentRun).where(AgentRun.idempotency_key == idempotency_key)
-            )
-        ).scalar_one_or_none()
+        stmt = select(AgentRun).where(AgentRun.idempotency_key == idempotency_key)
+        if not auth.privileged:
+            stmt = stmt.where(AgentRun.user_id == auth.user_id)
+        existing = (await session.execute(stmt)).scalar_one_or_none()
         if existing is not None:
             return _public_run(existing)
 
@@ -108,15 +112,15 @@ async def start_run(
     if instrument is None:
         raise HTTPException(status_code=404, detail=f"instrument '{body.symbol}' not found")
 
-    # Per-symbol dedup: one in-flight run per instrument.
-    in_flight = (
-        await session.execute(
-            select(AgentRun).where(
-                AgentRun.symbol == instrument.symbol,
-                AgentRun.status.in_(("pending", "running")),
-            )
-        )
-    ).scalars().first()
+    # Per-symbol dedup: one in-flight run per instrument PER CALLER (a user's
+    # in-flight run must not block other users; service context blocks on any).
+    dedup = select(AgentRun).where(
+        AgentRun.symbol == instrument.symbol,
+        AgentRun.status.in_(("pending", "running")),
+    )
+    if not auth.privileged:
+        dedup = dedup.where(AgentRun.user_id == auth.user_id)
+    in_flight = (await session.execute(dedup)).scalars().first()
     if in_flight is not None:
         raise HTTPException(
             status_code=409,
@@ -135,6 +139,7 @@ async def start_run(
             id=uuid.uuid4(),
             instrument_id=instrument.id,
             symbol=instrument.symbol,
+            user_id=auth.user_id,
             status="pending",
             trigger="api",
             debate_rounds=body.debate_rounds,
@@ -146,11 +151,14 @@ async def start_run(
         # Lost an idempotency-key race: another request created the run first.
         _guard.release()
         await session.rollback()
-        existing = (
-            await session.execute(
-                select(AgentRun).where(AgentRun.idempotency_key == idempotency_key)
-            )
-        ).scalar_one()
+        race = select(AgentRun).where(AgentRun.idempotency_key == idempotency_key)
+        if not auth.privileged:
+            race = race.where(AgentRun.user_id == auth.user_id)
+        existing = (await session.execute(race)).scalar_one_or_none()
+        if existing is None:  # key collided with ANOTHER user's run -> conflict
+            raise HTTPException(
+                status_code=409, detail="idempotency key already in use"
+            ) from None
         return _public_run(existing)
     except Exception:
         _guard.release()
@@ -163,19 +171,26 @@ async def start_run(
 
 @router.get("/runs", response_model=list[AgentRunOut])
 async def list_runs(
+    auth: Auth,
     limit: int = 20,
     session: AsyncSession = Depends(get_session),
 ) -> list[AgentRunOut]:
-    result = await session.execute(
-        select(AgentRun).order_by(AgentRun.created_at.desc()).limit(min(limit, 100))
-    )
+    stmt = select(AgentRun)
+    if not auth.privileged:
+        stmt = stmt.where(AgentRun.user_id == auth.user_id)
+    stmt = stmt.order_by(AgentRun.created_at.desc()).limit(min(limit, 100))
+    result = await session.execute(stmt)
     return [_public_run(r) for r in result.scalars()]
 
 
-async def _get_run_or_404(session: AsyncSession, run_id: uuid.UUID) -> AgentRun:
-    run = (
-        await session.execute(select(AgentRun).where(AgentRun.id == run_id))
-    ).scalar_one_or_none()
+async def _get_run_or_404(
+    session: AsyncSession, run_id: uuid.UUID, auth: AuthContext
+) -> AgentRun:
+    """Load a run the caller may see (cross-user access -> 404)."""
+    stmt = select(AgentRun).where(AgentRun.id == run_id)
+    if not auth.privileged:
+        stmt = stmt.where(AgentRun.user_id == auth.user_id)
+    run = (await session.execute(stmt)).scalar_one_or_none()
     if run is None:
         raise HTTPException(status_code=404, detail=f"run '{run_id}' not found")
     return run
@@ -184,18 +199,20 @@ async def _get_run_or_404(session: AsyncSession, run_id: uuid.UUID) -> AgentRun:
 @router.get("/runs/{run_id}", response_model=AgentRunOut)
 async def get_run(
     run_id: uuid.UUID,
+    auth: Auth,
     session: AsyncSession = Depends(get_session),
 ) -> AgentRunOut:
-    run = await _get_run_or_404(session, run_id)
+    run = await _get_run_or_404(session, run_id, auth)
     return _public_run(run)
 
 
 @router.get("/runs/{run_id}/messages", response_model=list[AgentMessageOut])
 async def get_run_messages(
     run_id: uuid.UUID,
+    auth: Auth,
     session: AsyncSession = Depends(get_session),
 ) -> list[AgentMessageOut]:
-    await _get_run_or_404(session, run_id)
+    await _get_run_or_404(session, run_id, auth)
     result = await session.execute(
         select(AgentMessage).where(AgentMessage.run_id == run_id).order_by(AgentMessage.seq)
     )

@@ -319,6 +319,57 @@ async def test_chat_round_trip_with_fake_llm(session, seeded):
     assert chat.title.startswith("How does the market look?")
 
 
+async def test_multi_user_isolation(session, seeded):
+    """Phase 4: users see only their own chat sessions and runs; admin sees all."""
+    from app.core.auth import AuthContext
+    from app.models.chat import ChatSession
+
+    instrument, _ = seeded
+    user_a, user_b = uuid.uuid4(), uuid.uuid4()
+
+    chat_a = ChatSession(id=uuid.uuid4(), user_id=user_a, title="A's chat")
+    chat_b = ChatSession(id=uuid.uuid4(), user_id=user_b, title="B's chat")
+    run_a = AgentRun(
+        id=uuid.uuid4(), instrument_id=instrument.id, symbol=instrument.symbol,
+        user_id=user_a, status="completed", trigger="test", debate_rounds=1,
+    )
+    session.add_all([chat_a, chat_b, run_a])
+    await session.commit()
+
+    ctx_a = AuthContext(user_id=user_a, role="user", via="jwt")
+    ctx_b = AuthContext(user_id=user_b, role="user", via="jwt")
+    ctx_admin = AuthContext(user_id=uuid.uuid4(), role="admin", via="jwt")
+
+    async def visible_chats(ctx: AuthContext) -> set[uuid.UUID]:
+        stmt = select(ChatSession.id).where(
+            ChatSession.id.in_([chat_a.id, chat_b.id])
+        )
+        if not ctx.privileged:
+            stmt = stmt.where(ChatSession.user_id == ctx.user_id)
+        return set((await session.execute(stmt)).scalars())
+
+    assert await visible_chats(ctx_a) == {chat_a.id}
+    assert await visible_chats(ctx_b) == {chat_b.id}
+    assert await visible_chats(ctx_admin) == {chat_a.id, chat_b.id}
+
+    async def visible_runs(ctx: AuthContext) -> set[uuid.UUID]:
+        stmt = select(AgentRun.id).where(AgentRun.id == run_a.id)
+        if not ctx.privileged:
+            stmt = stmt.where(AgentRun.user_id == ctx.user_id)
+        return set((await session.execute(stmt)).scalars())
+
+    assert await visible_runs(ctx_a) == {run_a.id}
+    assert await visible_runs(ctx_b) == set()  # cross-user run invisible
+    assert await visible_runs(ctx_admin) == {run_a.id}
+
+    # cleanup test rows
+    from sqlalchemy import delete
+
+    await session.execute(delete(ChatSession).where(ChatSession.id.in_([chat_a.id, chat_b.id])))
+    await session.execute(delete(AgentRun).where(AgentRun.id == run_a.id))
+    await session.commit()
+
+
 async def test_idempotency_key_returns_same_run(seeded):
     """Router-level idempotent replay (MED-9) with real persistence."""
     settings = get_settings()

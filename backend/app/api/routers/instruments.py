@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Annotated
 
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.auth import AuthContext, get_auth
 from app.db.base import get_session
 from app.ml.base import ForecasterError
 from app.schemas.forecast import ForecastOut, ForecastPoint
@@ -125,6 +127,7 @@ async def get_indicators(
 @router.get("/{symbol}/forecast", response_model=ForecastOut)
 async def get_forecast(
     symbol: str,
+    auth: Annotated[AuthContext, Depends(get_auth)],
     horizon: int = Query(default=5, ge=1, le=60),
     model: str | None = Query(default=None, description="'kronos' or 'baseline'"),
     persist: bool = Query(default=True),
@@ -132,7 +135,12 @@ async def get_forecast(
 ) -> ForecastOut:
     try:
         run = await forecast_service.run_forecast(
-            session, symbol.upper(), horizon, model_name=model, persist=persist
+            session,
+            symbol.upper(),
+            horizon,
+            model_name=model,
+            persist=persist,
+            user_id=auth.user_id,
         )
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
