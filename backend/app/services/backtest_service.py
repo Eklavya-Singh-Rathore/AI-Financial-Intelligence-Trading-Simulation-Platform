@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import uuid
 from dataclasses import dataclass
 from datetime import date
 
@@ -37,6 +38,7 @@ async def run_backtest(
     initial_cash: float = 1_000_000.0,
     params: dict | None = None,
     persist: bool = True,
+    user_id: uuid.UUID | None = None,
 ) -> BacktestRun:
     if strategy != "sma_crossover":
         raise BacktesterError(
@@ -80,6 +82,7 @@ async def run_backtest(
     if persist:
         session.add(
             Backtest(
+                user_id=user_id,
                 strategy_name=strategy,
                 engine=result.engine,
                 symbols=[symbol],

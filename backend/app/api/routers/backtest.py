@@ -2,20 +2,26 @@
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.backtesting.base import BacktesterError
+from app.core.auth import AuthContext, get_auth
 from app.db.base import get_session
 from app.schemas.backtest import BacktestRequest, BacktestResultOut
 from app.services import backtest_service
 
 router = APIRouter(prefix="/backtest", tags=["backtest"])
 
+Auth = Annotated[AuthContext, Depends(get_auth)]
+
 
 @router.post("", response_model=BacktestResultOut)
 async def run_backtest(
     body: BacktestRequest,
+    auth: Auth,
     session: AsyncSession = Depends(get_session),
 ) -> BacktestResultOut:
     """Run a strategy backtest over stored price history and persist the result."""
@@ -29,6 +35,7 @@ async def run_backtest(
             end=body.end,
             initial_cash=body.initial_cash,
             params=body.params.model_dump(),
+            user_id=auth.user_id,
         )
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

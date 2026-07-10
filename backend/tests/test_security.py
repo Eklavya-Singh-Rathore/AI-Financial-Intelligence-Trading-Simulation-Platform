@@ -15,10 +15,17 @@ from fastapi.testclient import TestClient
 
 
 @pytest.fixture
-def client():
+def client(monkeypatch):
     async def _null_session():
         yield None
 
+    # Hermetic premise: only what each test sets is configured (local .env may
+    # otherwise enable Supabase user auth and turn open access into 401s).
+    for key in ("API_KEY", "SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_JWT_SECRET"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("SUPABASE_URL", "")
+    monkeypatch.setenv("SUPABASE_ANON_KEY", "")
+    get_settings.cache_clear()
     app.dependency_overrides[get_session] = _null_session
     try:
         # raise_server_exceptions=False: DB-touching routes 500 against the
@@ -27,6 +34,7 @@ def client():
             yield c
     finally:
         app.dependency_overrides.clear()
+        get_settings.cache_clear()
 
 
 @pytest.fixture

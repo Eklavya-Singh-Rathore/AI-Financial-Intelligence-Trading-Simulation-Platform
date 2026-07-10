@@ -83,10 +83,18 @@ alembic upgrade head
 uvicorn app.main:app --reload                     # Swagger at http://localhost:8000/docs
 ```
 
-### Security model (Phase 2.5)
+### Security model (Phases 2.5 + 4)
 
-- Set `API_KEY` in `.env`; every endpoint except `/live`, `/health`, and docs
-  then requires the `X-API-Key` header. Empty key = open (development only,
+- **User auth (Phase 4):** Supabase Auth issues JWTs; the backend accepts
+  `Authorization: Bearer <token>` on every business route. Verification is
+  local HS256 when `SUPABASE_JWT_SECRET` is set, otherwise validated against
+  Supabase `/auth/v1/user` (cached). Roles: `admin` (granted automatically to
+  the owner emails at sign-up via a DB trigger) sees everything; `user` sees
+  only rows they own (`user_id` on chat sessions, agent runs, backtests,
+  forecasts — cross-user access returns 404). Sign-up is open.
+- **Service auth:** set `API_KEY` in `.env`; the `X-API-Key` header grants an
+  admin-equivalent service context (automation, tests, local-dev proxy
+  fallback). With neither configured the API runs open (development only,
   loudly warned at startup).
 - Per-client rate limiting (`RATE_LIMIT_PER_MINUTE`), agent-run concurrency cap
   (`MAX_CONCURRENT_AGENT_RUNS`, 429 on saturation), one in-flight run per
@@ -152,6 +160,19 @@ Note: the base market-data schema is owned by earlier migrations that live in th
 prior repository, so a fresh local DB needs a one-time schema load, e.g.
 `pg_dump --schema-only` from Supabase, before `alembic upgrade head` applies the
 `forecasts`/`backtests` tables on top. Day-to-day development targets Supabase.
+
+## Deployment
+
+- **Frontend:** Vercel (root directory `frontend/`). Env vars:
+  `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `BACKEND_URL`
+  (the backend's public URL once hosted; leave `BACKEND_API_KEY` empty in
+  production — users authenticate with their own sessions).
+- **Backend:** any Docker host; the maintained runbook targets Oracle Cloud —
+  see [docs/deploy-oracle.md](docs/deploy-oracle.md)
+  (`infrastructure/docker-compose.prod.yml` runs the API behind Caddy with
+  automatic HTTPS). Not Vercel-deployable (multi-GB torch/nautilus image).
+- **Before production:** rotate every development credential (list in
+  docs/deploy-oracle.md) and create the least-privilege DB role.
 
 ## Security
 

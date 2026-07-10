@@ -28,6 +28,7 @@ class Forecast(Base):
     instrument_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("instruments.id", ondelete="CASCADE"), nullable=False
     )
+    user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     model_name: Mapped[str] = mapped_column(String(64), nullable=False)
     horizon: Mapped[int] = mapped_column(Integer, nullable=False)
     step: Mapped[int] = mapped_column(Integer, nullable=False)

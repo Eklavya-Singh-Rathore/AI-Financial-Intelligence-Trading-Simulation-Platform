@@ -34,6 +34,14 @@ class Settings(BaseSettings):
     # When api_key is set, every route except /live, /health, /docs, /openapi.json
     # requires the X-API-Key header. Empty = auth disabled (development only).
     api_key: str = ""
+
+    # --- Supabase Auth (Phase 4 user authentication) ---
+    # supabase_url + supabase_anon_key enable Bearer-JWT user auth. JWT
+    # verification is local HS256 when supabase_jwt_secret is set (dashboard ->
+    # Settings -> API -> JWT Secret), otherwise remote via /auth/v1/user.
+    supabase_url: str = ""
+    supabase_anon_key: str = ""
+    supabase_jwt_secret: str = ""
     rate_limit_per_minute: int = 120
     cors_origins: str = ""  # comma-separated origins; empty = CORS disabled
     expose_error_details: bool = False  # include internal error text in API responses

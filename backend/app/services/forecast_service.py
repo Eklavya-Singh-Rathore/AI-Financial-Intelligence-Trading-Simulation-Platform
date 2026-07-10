@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import uuid
 from dataclasses import dataclass
 from datetime import date
 
@@ -33,6 +34,7 @@ async def run_forecast(
     *,
     model_name: str | None = None,
     persist: bool = True,
+    user_id: uuid.UUID | None = None,
 ) -> ForecastRun:
     instrument = await market_data.get_instrument_by_symbol(session, symbol)
     if instrument is None:
@@ -57,6 +59,7 @@ async def run_forecast(
             [
                 Forecast(
                     instrument_id=instrument.id,
+                    user_id=user_id,
                     model_name=result.model_name,
                     horizon=horizon,
                     step=i + 1,

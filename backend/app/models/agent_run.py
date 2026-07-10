@@ -30,6 +30,8 @@ class AgentRun(Base):
         UUID(as_uuid=True), ForeignKey("instruments.id", ondelete="CASCADE"), nullable=False
     )
     symbol: Mapped[str] = mapped_column(String(32), nullable=False)
+    # Owner (auth.users.id); NULL = service-created (visible to admin/service only).
+    user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="pending")
     trigger: Mapped[str] = mapped_column(String(16), nullable=False, server_default="api")
     # Client-supplied Idempotency-Key: repeated POSTs with the same key return
