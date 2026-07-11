@@ -122,7 +122,7 @@ class SpaceClient:
             attempt += 1
             try:
                 response = self._client.request(method, url, json=json)
-            except httpx.ConnectError as exc:
+            except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
                 if attempt <= self.max_retries:
                     self._sleep_backoff(attempt, op=op, reason="connect_error")
                     continue

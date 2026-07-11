@@ -117,6 +117,22 @@ def test_connect_error_then_success(clock):
     assert client.post_json("/embed", {}, op="embed") == {"ok": 1}
 
 
+def test_connect_timeout_retried_like_connect_error(clock):
+    """ConnectTimeout subclasses TimeoutException but must take the connect path."""
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise httpx.ConnectTimeout("slow handshake", request=request)
+        return httpx.Response(200, json={"ok": 1})
+
+    client = make_client(handler)
+    # retry_read_timeout=False - a connect timeout must still retry
+    assert client.post_json("/forecast", {}, op="forecast") == {"ok": 1}
+    assert calls["n"] == 2
+
+
 def test_read_timeout_not_retried_by_default(clock):
     calls = {"n": 0}
 

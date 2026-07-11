@@ -3,8 +3,9 @@ title: AI Inference Service
 emoji: 📈
 colorFrom: indigo
 colorTo: green
-sdk: docker
-app_port: 7860
+sdk: gradio
+sdk_version: 6.20.0
+app_file: app.py
 pinned: false
 license: mit
 short_description: Kronos K-line forecasts + MiniLM embeddings API
@@ -20,15 +21,19 @@ MIT) and **MiniLM** embeddings
 ([sentence-transformers/all-MiniLM-L6-v2](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2))
 so the Render-hosted backend can run without torch.
 
-Model weights are **not** stored in this repo: they are downloaded from the
-Hugging Face Hub at Docker **build** time into the image's HF cache
-(`download_models.py`), and the container runs with `HF_HUB_OFFLINE=1` —
-restarts and wakes never re-download anything.
+**Packaging:** Gradio-SDK Space on **ZeroGPU** hardware (HF's July-2026 policy
+gates Docker/cpu-basic Spaces behind PRO; ZeroGPU remains free). The REST API
+is a FastAPI app with the Gradio UI mounted at `/ui`. **All inference runs on
+CPU** — Kronos-small is 24.7M params — so requests consume **no GPU quota**;
+the UI's "ZeroGPU smoke test" button is the only GPU-decorated function.
+
+Model weights are **not** stored in this repo: they download from the Hub into
+the container cache on cold start (~350 MB, adds ~1–2 min to a cold boot).
 
 `kronos_src/` is a verbatim copy of the official Kronos implementation
-(github.com/shiyu-coder/Kronos, MIT — see `kronos_src/NOTICE.md` for
-provenance and the single relative-import fix). It is kept byte-identical to
-`backend/app/ml/kronos_src/` in the main repo (CI enforces the diff).
+(github.com/shiyu-coder/Kronos, MIT — see `kronos_src/NOTICE.md`). It is kept
+byte-identical to `backend/app/ml/kronos_src/` in the main repo (CI enforces
+the diff).
 
 ## Endpoints
 
@@ -37,6 +42,7 @@ provenance and the single relative-import fix). It is kept byte-identical to
 | `GET /health` | none | liveness + model-loaded status (also the keep-warm ping) |
 | `POST /forecast` | private Space token / optional `X-API-Key` | Kronos close-price forecast |
 | `POST /embed` | private Space token / optional `X-API-Key` | MiniLM sentence embeddings (384-d) |
+| `/ui` | 〃 | human status page + ZeroGPU smoke test |
 
 When the Space is **private** (default deployment), Hugging Face itself
 rejects unauthenticated requests — callers send `Authorization: Bearer <HF

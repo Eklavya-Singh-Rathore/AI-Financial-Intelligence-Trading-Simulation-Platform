@@ -29,7 +29,7 @@ recommendations, and serves a **multi-user** Next.js dashboard + grounded chat.
 | Kronos | `a284557` | Vendored `app/ml/kronos_src/` (MIT; one relative-import fix); `model=kronos` verified live |
 | 3 | `9b0aeed`,`89b478b`,`a0c3976`,`95c2034` | **First live verification** (11,844 bars, live Kronos forecast, live Nautilus backtest, first completed agent run — drawdown veto fired) + 5 live-found bug fixes; `/instruments/summary`; persisted chat + RAG (migration 0008); Next.js frontend (dashboard/candles+forecast overlay/backtest UI/agent transcripts/chat), auth proxy, both themes |
 | 4 | `33ffb60` | **Supabase Auth + JWT + RBAC + per-user isolation** (migration 0009), open sign-up, login UI + session middleware, GitHub push, Vercel frontend deploy, (superseded) Oracle backend runbook |
-| 4.5 | this phase | **Deployment migration**: `RemoteKronosForecaster` + remote MiniLM via a private HF Space (`ai-inference-service`), reusable `space_client` (retries/wake handling/structured errors), `KRONOS_MODE`/`EMBEDDINGS_MODE` toggles, slim torch-free Render image (`Dockerfile.render` + `requirements-deploy.lock`), `render.yaml`, keepalive workflow, proxy `maxDuration=300`, docs replace the Oracle runbook |
+| 4.5 | this phase | **Deployment migration**: `RemoteKronosForecaster` + remote MiniLM via a private HF Space (`ai-inference-service`, Gradio/ZeroGPU after HF paywalled Docker Spaces mid-phase), reusable `space_client` (retries/wake handling/structured errors), `KRONOS_MODE`/`EMBEDDINGS_MODE` toggles, slim torch-free Render image (`Dockerfile.render` + `requirements-deploy.lock`), `render.yaml`, keepalive workflow, proxy `maxDuration=300`, docs replace the Oracle runbook |
 
 ## 3. Architecture (stable since audit; Phase 4.5 adds remote inference)
 
@@ -110,10 +110,13 @@ Users → Vercel frontend → Render backend (slim, torch-free) → Supabase
   `main`). Runbook + free-tier evaluation: `docs/deploy-render.md`.
   Backend URL: `https://stock-ai-backend.onrender.com` *(confirm in the Render
   dashboard if the service name was adjusted at create time)*.
-- **Inference → HF Space** `Eklavya73/ai-inference-service` (private, Docker,
-  CPU Basic free): official Kronos (`NeoQuasar/Kronos-small` +
-  `Kronos-Tokenizer-base`) + MiniLM, weights baked into the image at build,
-  endpoints `/forecast` `/embed` `/health`. Runbook: `docs/deploy-hf-space.md`.
+- **Inference → HF Space** `Eklavya73/ai-inference-service` (private,
+  **Gradio SDK on ZeroGPU** — HF's July-2026 policy gates Docker/cpu-basic
+  Spaces behind PRO, so the free path is ZeroGPU with CPU-only inference that
+  consumes no GPU quota): official Kronos (`NeoQuasar/Kronos-small` +
+  `Kronos-Tokenizer-base`) + MiniLM, endpoints `/forecast` `/embed` `/health`
+  (+ `/ui` status page). Weights download on cold start (~350 MB; keep-warm
+  makes that rare). Runbook: `docs/deploy-hf-space.md`.
   URL: `https://eklavya73-ai-inference-service.hf.space`.
 - **Keep-alive:** GH Actions `keepalive.yml` pings backend `/live` every
   10 min (repo variable `BACKEND_LIVE_URL`); the backend scheduler pings the
