@@ -112,9 +112,18 @@ Users → Vercel frontend → Render backend (slim, torch-free) → Supabase
                                    └→ Gemini/OpenAI · NewsAPI · yfinance
 ```
 
-- **Frontend → Vercel** (root `frontend/`; owner's personal Vercel account).
+- **Frontend → Vercel** — project `ai-financial-intelligence-platform`
+  (team `eklavya-singh-rathores-projects`), **LIVE** at
+  `https://ai-financial-intelligence-platf-eklavya-singh-rathores-projects.vercel.app`.
   Env: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
-  **`BACKEND_URL` = the Render URL** (leave `BACKEND_API_KEY` empty in prod).
+  **`BACKEND_URL=https://stock-ai-backend-gv17.onrender.com`** (set 2026-07-11;
+  `BACKEND_API_KEY` intentionally empty). Two project fixes were needed on
+  go-live: **Root Directory was unset** → set to `frontend` (GitHub
+  auto-deploys had been failing "No Next.js version detected" for hours), and
+  **Vercel Authentication (ssoProtection) was disabled** so the production URL
+  is publicly reachable (the app's own Supabase auth + `/login` middleware gate
+  content). Verified: `/api/backend/health` proxies through to the Render
+  backend returning `database:ok, kronos_mode:remote`.
 - **Backend → Render free web service** (Docker `backend/Dockerfile.render`,
   blueprint `render.yaml`, region Singapore, health `/live`, auto-deploy from
   `main`; service `srv-d995r0faqgkc73fpjfsg`, created via API 2026-07-11).
@@ -143,12 +152,11 @@ Users → Vercel frontend → Render backend (slim, torch-free) → Supabase
   https://stock-ai-backend-gv17.onrender.com/live` is set and the `keepalive`
   workflow was dispatch-verified green (pings `/live` every 10 min), so Render
   no longer sleeps and the 13:00 UTC ingest fires.
-- **Remaining go-live steps (owner):** (1) set `BACKEND_URL=
-  https://stock-ai-backend-gv17.onrender.com` in the frontend's Vercel project
-  (leave `BACKEND_API_KEY` empty) and redeploy — this is the one wire left to
-  connect the deployed frontend to the backend (that Vercel account is not the
-  one reachable from this session); (2) browser E2E on the production site
-  after (1); (3) rotate the credentials in §8.
+- **Go-live: COMPLETE.** Frontend (Vercel) ↔ backend (Render) ↔ inference
+  (HF Space) ↔ Supabase all live and end-to-end verified 2026-07-11. The only
+  remaining owner task is **credential rotation** (§8) — everything shared in
+  chat this phase (Render API key, HF write token) plus the standing dev-key
+  list; swap the HF write token for a fine-grained *read* token on the Space.
 
 ## 8. Security posture & owner actions
 
