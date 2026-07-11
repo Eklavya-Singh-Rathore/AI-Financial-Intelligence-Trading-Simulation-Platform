@@ -205,10 +205,12 @@ prior repository, so a fresh local DB needs a one-time schema load, e.g.
   blueprint `render.yaml`) — runbook: [docs/deploy-render.md](docs/deploy-render.md).
   The slim image has no torch (~idle 230 MB, fits the 512 MB instance); a
   GitHub Actions cron keeps it awake so the daily ingest fires.
-- **ML inference → Hugging Face Space** `ai-inference-service` (Docker, CPU
-  Basic free tier, private) serving the official Kronos + MiniLM — runbook:
-  [docs/deploy-hf-space.md](docs/deploy-hf-space.md). Weights are baked into
-  the image from the Hub at build time; nothing is re-uploaded.
+- **ML inference → Hugging Face Space** `ai-inference-service` (private
+  Gradio-SDK Space on ZeroGPU hardware — HF's 2026 policy gates Docker/cpu-basic
+  Spaces behind PRO; inference itself runs on CPU and consumes no GPU quota)
+  serving the official Kronos + MiniLM — runbook:
+  [docs/deploy-hf-space.md](docs/deploy-hf-space.md). Weights load from the
+  Hub; nothing is re-uploaded to the Space repo.
 - **Every environment variable** (what, where, secret-or-not):
   [docs/environment.md](docs/environment.md).
 - **Self-hosting alternative:** the full image (`backend/Dockerfile`, torch

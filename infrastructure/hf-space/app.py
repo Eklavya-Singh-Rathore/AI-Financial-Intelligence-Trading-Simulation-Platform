@@ -1,16 +1,26 @@
 """ai-inference-service: official Kronos forecasts + MiniLM embeddings.
 
-FastAPI app for a Hugging Face Docker Space. Models load once at startup from
-the image's baked HF cache (see Dockerfile / download_models.py); inference is
-CPU-only. Endpoints:
+Gradio-SDK Space on ZeroGPU hardware (HF's July-2026 policy gates Docker/
+cpu-basic Spaces behind PRO; ZeroGPU remains available to free accounts).
+The REST API is a FastAPI app with the Gradio UI mounted at /ui - the
+endpoints and JSON contracts are identical to the original Docker design, so
+the backend's space_client needs no changes:
 
-  GET  /health    liveness + model status (open; doubles as the keep-warm ping)
+  GET  /health    liveness + model status (doubles as the keep-warm ping)
   POST /forecast  Kronos close-price forecast for one OHLCV context window
   POST /embed     MiniLM sentence embeddings (384-d, normalized by default)
 
-Auth: a private Space is already gated by Hugging Face itself (Bearer token).
-If the SPACE_API_KEY env/secret is set, /forecast and /embed additionally
-require a matching X-API-Key header (covers the public-Space option).
+Inference runs on CPU: Kronos-small (24.7M params) takes a few seconds per
+forecast and consumes ZERO GPU quota. The @spaces.GPU-decorated button in the
+UI exists only to satisfy/verify the ZeroGPU runtime - the backend never
+calls it.
+
+Auth: a private Space is gated by Hugging Face itself (Bearer token). If the
+SPACE_API_KEY env/secret is set, /forecast and /embed additionally require a
+matching X-API-Key header (covers the public-Space option).
+
+Models load at import time; on a cold start the checkpoints download from the
+Hub (~350 MB total) into the container cache first.
 """
 
 from __future__ import annotations
@@ -20,18 +30,24 @@ import math
 import os
 import threading
 import time
-from contextlib import asynccontextmanager
 from typing import Any
 
+try:  # ZeroGPU runtime hook - import before any CUDA use. Harmless elsewhere.
+    import spaces  # type: ignore
+except Exception:  # noqa: BLE001 - keep the API alive even if the hook breaks
+    spaces = None  # type: ignore
+
+import gradio as gr
 import pandas as pd
 import torch
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field, model_validator
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("ai-inference-service")
 
-APP_VERSION = "0.1.0"
+APP_VERSION = "0.2.0"  # 0.2: Gradio/ZeroGPU packaging (was Docker)
 KRONOS_MODEL_ID = os.environ.get("KRONOS_MODEL_ID", "NeoQuasar/Kronos-small")
 KRONOS_TOKENIZER_ID = os.environ.get("KRONOS_TOKENIZER_ID", "NeoQuasar/Kronos-Tokenizer-base")
 EMBEDDING_MODEL_ID = os.environ.get(
@@ -40,33 +56,28 @@ EMBEDDING_MODEL_ID = os.environ.get(
 KRONOS_MAX_CONTEXT = int(os.environ.get("KRONOS_MAX_CONTEXT", "512"))
 SPACE_API_KEY = os.environ.get("SPACE_API_KEY", "")
 
-_STATE: dict[str, Any] = {"predictor": None, "embedder": None}
-# 2 vCPU on the free tier: serialize Kronos sampling so concurrent requests
-# don't thrash each other; embeddings are cheap enough to run unserialized.
+# Serialize Kronos sampling; embeddings are cheap and stay unserialized.
 _PREDICT_LOCK = threading.Lock()
 
+# ---- load models at import (cold start downloads from the Hub first) -------
+torch.set_num_threads(2)
+log.info("loading kronos model=%s tokenizer=%s", KRONOS_MODEL_ID, KRONOS_TOKENIZER_ID)
+from kronos_src.model import Kronos, KronosPredictor, KronosTokenizer  # noqa: E402
 
-@asynccontextmanager
-async def lifespan(_: FastAPI):
-    torch.set_num_threads(2)
-    from kronos_src.model import Kronos, KronosPredictor, KronosTokenizer
+_tokenizer = KronosTokenizer.from_pretrained(KRONOS_TOKENIZER_ID)
+_model = Kronos.from_pretrained(KRONOS_MODEL_ID)
+PREDICTOR = KronosPredictor(_model, _tokenizer, device="cpu", max_context=KRONOS_MAX_CONTEXT)
 
-    log.info("loading kronos model=%s tokenizer=%s", KRONOS_MODEL_ID, KRONOS_TOKENIZER_ID)
-    tokenizer = KronosTokenizer.from_pretrained(KRONOS_TOKENIZER_ID)
-    model = Kronos.from_pretrained(KRONOS_MODEL_ID)
-    _STATE["predictor"] = KronosPredictor(
-        model, tokenizer, device="cpu", max_context=KRONOS_MAX_CONTEXT
-    )
+log.info("loading embedder=%s", EMBEDDING_MODEL_ID)
+from sentence_transformers import SentenceTransformer  # noqa: E402
 
-    from sentence_transformers import SentenceTransformer
-
-    log.info("loading embedder=%s", EMBEDDING_MODEL_ID)
-    _STATE["embedder"] = SentenceTransformer(EMBEDDING_MODEL_ID, device="cpu")
-    log.info("models ready")
-    yield
+EMBEDDER = SentenceTransformer(EMBEDDING_MODEL_ID, device="cpu")
+log.info("models ready")
 
 
-app = FastAPI(title="ai-inference-service", version=APP_VERSION, lifespan=lifespan)
+# ---- REST API ---------------------------------------------------------------
+
+api = FastAPI(title="ai-inference-service", version=APP_VERSION)
 
 
 def _require_api_key(request: Request) -> None:
@@ -116,12 +127,17 @@ class EmbedRequest(BaseModel):
         return self
 
 
-@app.get("/health")
+@api.get("/")
+def root() -> RedirectResponse:
+    return RedirectResponse(url="/ui")
+
+
+@api.get("/health")
 def health() -> dict[str, Any]:
     return {
         "status": "ok",
-        "kronos_loaded": _STATE["predictor"] is not None,
-        "embedding_loaded": _STATE["embedder"] is not None,
+        "kronos_loaded": PREDICTOR is not None,
+        "embedding_loaded": EMBEDDER is not None,
         "device": "cpu",
         "torch": torch.__version__,
         "kronos_model_id": KRONOS_MODEL_ID,
@@ -131,12 +147,9 @@ def health() -> dict[str, Any]:
     }
 
 
-@app.post("/forecast")
+@api.post("/forecast")
 def forecast(payload: ForecastRequest, request: Request) -> dict[str, Any]:
     _require_api_key(request)
-    predictor = _STATE["predictor"]
-    if predictor is None:
-        raise HTTPException(status_code=503, detail="model still loading")
 
     # Defensive context cap (the backend already sends tail(max_context)).
     n = len(payload.context.close)
@@ -159,7 +172,7 @@ def forecast(payload: ForecastRequest, request: Request) -> dict[str, Any]:
     started = time.perf_counter()
     try:
         with _PREDICT_LOCK:
-            pred_df = predictor.predict(
+            pred_df = PREDICTOR.predict(
                 df=x_df,
                 x_timestamp=x_timestamp,
                 y_timestamp=y_timestamp,
@@ -180,7 +193,9 @@ def forecast(payload: ForecastRequest, request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail="forecast failed: invalid output")
 
     elapsed_ms = int((time.perf_counter() - started) * 1000)
-    log.info("forecast ok context=%d horizon=%d elapsed_ms=%d", len(x_df), payload.horizon, elapsed_ms)
+    log.info(
+        "forecast ok context=%d horizon=%d elapsed_ms=%d", len(x_df), payload.horizon, elapsed_ms
+    )
     return {
         "predictions": predictions,
         "model_id": KRONOS_MODEL_ID,
@@ -190,16 +205,13 @@ def forecast(payload: ForecastRequest, request: Request) -> dict[str, Any]:
     }
 
 
-@app.post("/embed")
+@api.post("/embed")
 def embed(payload: EmbedRequest, request: Request) -> dict[str, Any]:
     _require_api_key(request)
-    embedder = _STATE["embedder"]
-    if embedder is None:
-        raise HTTPException(status_code=503, detail="model still loading")
 
     started = time.perf_counter()
     try:
-        vectors = embedder.encode(
+        vectors = EMBEDDER.encode(
             payload.texts,
             normalize_embeddings=payload.normalize,
             show_progress_bar=False,
@@ -219,3 +231,37 @@ def embed(payload: EmbedRequest, request: Request) -> dict[str, Any]:
         "model_id": EMBEDDING_MODEL_ID,
         "elapsed_ms": elapsed_ms,
     }
+
+
+# ---- Gradio UI (mounted at /ui; also hosts the ZeroGPU smoke check) ---------
+
+
+def _gpu_smoke() -> str:
+    """Prove the ZeroGPU slice attaches. Never called by the backend."""
+    return f"cuda_available={torch.cuda.is_available()} torch={torch.__version__}"
+
+
+if spaces is not None:
+    _gpu_smoke = spaces.GPU(duration=10)(_gpu_smoke)
+
+with gr.Blocks(title="ai-inference-service") as demo:
+    gr.Markdown(
+        "## ai-inference-service\n"
+        "API-only Space serving the official **Kronos** K-line model and "
+        "**MiniLM** embeddings for the AI Financial Intelligence Platform.\n\n"
+        "Endpoints: `GET /health` · `POST /forecast` · `POST /embed` "
+        "(see the repo's README for contracts). Inference runs on **CPU** and "
+        "consumes no GPU quota; the button below only verifies the ZeroGPU "
+        "runtime is healthy."
+    )
+    btn = gr.Button("ZeroGPU smoke test")
+    out = gr.Textbox(label="result")
+    btn.click(_gpu_smoke, outputs=out)
+
+app = gr.mount_gradio_app(api, demo, path="/ui")
+
+if __name__ == "__main__":
+    import uvicorn
+
+    port = int(os.environ.get("GRADIO_SERVER_PORT", os.environ.get("PORT", "7860")))
+    uvicorn.run(app, host="0.0.0.0", port=port)

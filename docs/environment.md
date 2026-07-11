@@ -60,7 +60,7 @@ app boots with partial config and degrades explicitly).
 
 **Space-side** (Settings → Variables and secrets): `KRONOS_MODEL_ID`,
 `KRONOS_TOKENIZER_ID`, `EMBEDDING_MODEL_ID`, `KRONOS_MAX_CONTEXT` (variables;
-model changes need a factory rebuild) and `SPACE_API_KEY` (secret, public-Space
+restart the Space to reload models) and `SPACE_API_KEY` (secret, public-Space
 option only).
 
 ## LLM providers

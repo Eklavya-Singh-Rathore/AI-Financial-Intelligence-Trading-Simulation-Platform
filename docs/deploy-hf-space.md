@@ -1,20 +1,31 @@
 # Inference Space deployment — Hugging Face (Phase 4.5)
 
-`ai-inference-service` is a **private Docker Space** on the free **CPU Basic**
-hardware (2 vCPU / 16 GB RAM / 50 GB disk) that serves the ML models the
-Render backend no longer runs in-process:
+`ai-inference-service` is a **private Gradio-SDK Space on ZeroGPU hardware**
+that serves the ML models the Render backend no longer runs in-process:
 
 - **`POST /forecast`** — the official **Kronos** K-line model
   (`NeoQuasar/Kronos-small` + `NeoQuasar/Kronos-Tokenizer-base`, MIT)
 - **`POST /embed`** — **MiniLM** sentence embeddings
   (`sentence-transformers/all-MiniLM-L6-v2`, 384-d, normalized)
 - **`GET /health`** — open liveness/model status (doubles as the keep-warm ping)
+- **`/ui`** — human status page (Gradio) + ZeroGPU smoke-test button
+
+> **Why ZeroGPU, not Docker?** Hugging Face's July-2026 policy gates Docker
+> and cpu-basic Gradio Spaces behind PRO ($9/mo); ZeroGPU Spaces remain
+> available to free accounts. The app is a FastAPI mounted alongside a minimal
+> Gradio UI, so the REST contract is identical to the original Docker design —
+> the backend's `space_client` is packaging-agnostic. **All inference runs on
+> CPU** (Kronos-small is 24.7M params), so backend traffic consumes **no GPU
+> quota**; only the UI smoke-test button touches the GPU slice.
+>
+> If the owner ever subscribes to PRO, the repo history contains the original
+> Docker packaging (Dockerfile + build-time weight bake) — commit `1e0b1db`.
 
 Source of truth: [`infrastructure/hf-space/`](../infrastructure/hf-space/) in
-this repo. Deploying = pushing those files to the Space repo. The Space repo
-never contains model weights — `download_models.py` bakes them into the Docker
-image from the Hub at **build** time, and the container runs with
-`HF_HUB_OFFLINE=1` (wakes never re-download).
+this repo. Deploying = pushing those files to the Space repo. Weights are
+**never** stored in the Space repo: they download from the Hub into the
+container cache on cold start (~350 MB → cold boots take ~1–2 min extra; the
+keep-warm ping makes this rare).
 
 `kronos_src/` inside the Space is a byte-identical copy of
 `backend/app/ml/kronos_src/` (the vendored official implementation, MIT +
@@ -23,28 +34,32 @@ backend copy and re-copy.
 
 ## Creating / updating the Space
 
-1. Create the Space (once): huggingface.co → **New Space** → name
-   `ai-inference-service`, SDK **Docker**, visibility **private**, hardware
-   **CPU Basic** (or via API:
-   `POST https://huggingface.co/api/repos/create` with
-   `{"name":"ai-inference-service","type":"space","private":true,"sdk":"docker"}`).
-2. Push the files (any of):
-   - `huggingface_hub` (used for the Phase 4.5 deployment):
-     ```python
-     from huggingface_hub import HfApi
-     HfApi(token="hf_...").upload_folder(
-         folder_path="infrastructure/hf-space",
-         repo_id="Eklavya73/ai-inference-service",
-         repo_type="space",
-         commit_message="deploy",
-         ignore_patterns=["__pycache__/*", "*.pyc"],
-     )
-     ```
-   - or git: `git clone https://huggingface.co/spaces/Eklavya73/ai-inference-service`,
-     copy the folder contents in, commit, push (token as password).
-3. The Space builds automatically (~5–10 min first time: CPU torch + weight
-   bake). Status is visible on the Space page; it's ready when `/health`
-   answers.
+1. Create the Space (once) with the ZeroGPU hardware flavor — free accounts
+   cannot create cpu-basic/Docker Spaces:
+   ```python
+   from huggingface_hub import HfApi
+   api = HfApi(token="hf_...")           # write token
+   api.create_repo(
+       repo_id="Eklavya73/ai-inference-service",
+       repo_type="space",
+       space_sdk="gradio",
+       space_hardware="zero-a10g",       # ZeroGPU
+       private=True,
+   )
+   ```
+   (UI path: New Space → SDK **Gradio** → hardware **ZeroGPU** → private.)
+2. Push the files:
+   ```python
+   api.upload_folder(
+       folder_path="infrastructure/hf-space",
+       repo_id="Eklavya73/ai-inference-service",
+       repo_type="space",
+       ignore_patterns=["**/__pycache__/**", "*.pyc"],
+   )
+   ```
+3. The Space builds (installs `requirements.txt` + the `sdk_version` pin of
+   gradio from the README front-matter), then starts; first start also
+   downloads the checkpoints. It's ready when `/health` answers.
 
 ## Auth model
 
@@ -61,7 +76,7 @@ HF token.
 
 | Name | Kind | Default | Notes |
 |---|---|---|---|
-| `KRONOS_MODEL_ID` | variable | `NeoQuasar/Kronos-small` | change → **factory rebuild** to re-bake weights |
+| `KRONOS_MODEL_ID` | variable | `NeoQuasar/Kronos-small` | forecast model (restart to reload) |
 | `KRONOS_TOKENIZER_ID` | variable | `NeoQuasar/Kronos-Tokenizer-base` | 〃 |
 | `EMBEDDING_MODEL_ID` | variable | `sentence-transformers/all-MiniLM-L6-v2` | must stay 384-d (DB column `vector(384)`) |
 | `KRONOS_MAX_CONTEXT` | variable | `512` | matches the checkpoint |
@@ -92,8 +107,9 @@ curl -s -o /dev/null -w "%{http_code}\n" $SPACE/health   # without token: 401 (p
 
 ## Sleep & wake behaviour
 
-Free Spaces sleep after **~48 h without requests** and take ~1 min to wake
-(the gateway answers **503** while starting). Two layers handle this:
+Free Spaces sleep after **~48 h without requests** and take ~1–2 min to wake
+(gateway answers **503** while starting; cold start includes the checkpoint
+download). Two layers handle this:
 
 - the backend scheduler pings `/health` every 6 h (`space_keepalive` job), so
   in steady state the Space never sleeps;
@@ -104,9 +120,9 @@ Free Spaces sleep after **~48 h without requests** and take ~1 min to wake
 ## Upgrade / rollback
 
 - **Code change:** edit `infrastructure/hf-space/` in the repo (kronos_src via
-  the backend copy), push to the Space → automatic rebuild. Weights layer is
-  cached unless `download_models.py`/requirements changed.
-- **Model change:** update the variables *and* trigger a **factory rebuild**
-  (Settings) so the bake layer re-runs; update the backend's
-  `KRONOS_MODEL_ID`/`KRONOS_TOKENIZER_ID` to keep metadata truthful.
+  the backend copy), push to the Space → automatic rebuild/restart.
+- **Model change:** update the Space variables and restart; update the
+  backend's `KRONOS_MODEL_ID`/`KRONOS_TOKENIZER_ID` to keep metadata truthful.
 - **Rollback:** revert the commit on the Space repo (it's plain git).
+- **ZeroGPU quota note:** backend endpoints are CPU-only and consume none;
+  the `/ui` smoke button consumes a few GPU-seconds per click.
