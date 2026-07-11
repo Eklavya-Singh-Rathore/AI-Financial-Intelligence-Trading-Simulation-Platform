@@ -52,6 +52,48 @@ def test_registry_unknown_name():
         get_forecaster("prophet")
 
 
+def test_registry_kronos_mode_switch(monkeypatch):
+    """KRONOS_MODE picks the implementation; the public name stays 'kronos'."""
+    from app.core.config import Settings
+    from app.ml import registry
+    from app.ml.kronos_forecaster import KronosForecaster
+    from app.ml.remote_kronos_forecaster import RemoteKronosForecaster
+
+    monkeypatch.setattr(registry, "_CACHE", {})
+    monkeypatch.setattr(
+        registry, "get_settings", lambda: Settings(_env_file=None, kronos_mode="remote")
+    )
+    remote = registry.get_forecaster("kronos")
+    assert isinstance(remote, RemoteKronosForecaster)
+    assert remote.name == "kronos"
+
+    monkeypatch.setattr(
+        registry, "get_settings", lambda: Settings(_env_file=None, kronos_mode="local")
+    )
+    local = registry.get_forecaster("kronos")
+    assert isinstance(local, KronosForecaster)
+    assert local.name == "kronos"
+
+    # cache is keyed by mode - both instances stay live and distinct
+    assert registry.get_forecaster("kronos") is local
+    monkeypatch.setattr(
+        registry, "get_settings", lambda: Settings(_env_file=None, kronos_mode="REMOTE ")
+    )
+    assert registry.get_forecaster("kronos") is remote  # normalized + cached
+
+
+def test_registry_baseline_unaffected_by_mode(monkeypatch):
+    from app.core.config import Settings
+    from app.ml import registry
+    from app.ml.baseline_forecaster import BaselineForecaster
+
+    monkeypatch.setattr(registry, "_CACHE", {})
+    monkeypatch.setattr(
+        registry, "get_settings", lambda: Settings(_env_file=None, kronos_mode="remote")
+    )
+    assert isinstance(registry.get_forecaster("baseline"), BaselineForecaster)
+
+
 def test_kronos_without_vendored_source_raises_cleanly(price_df):
     """Until app/ml/kronos_src is vendored, kronos must fail with a clear error."""
     try:

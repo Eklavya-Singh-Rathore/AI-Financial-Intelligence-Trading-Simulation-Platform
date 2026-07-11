@@ -24,4 +24,10 @@ async def health() -> dict:
             db_status = "ok"
         except Exception as exc:  # noqa: BLE001 - report, don't crash health
             db_status = f"error: {type(exc).__name__}"
-    return {"status": "ok", "env": settings.env, "database": db_status}
+    return {
+        "status": "ok",
+        "env": settings.env,
+        "database": db_status,
+        "kronos_mode": settings.kronos_mode,
+        "embeddings_mode": settings.embeddings_mode,
+    }

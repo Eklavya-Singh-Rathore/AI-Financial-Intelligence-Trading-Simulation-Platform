@@ -1,0 +1,91 @@
+# Production (Render) dependency lock - BASE deps only, resolved for
+# Linux x86_64 / CPython 3.12 with backend/requirements.lock as constraints.
+# Excludes the [local-ml] extra (torch, sentence-transformers, huggingface-hub,
+# safetensors, einops) and all dev tooling: in production KRONOS_MODE=remote /
+# EMBEDDINGS_MODE=remote delegate inference to the Hugging Face Space, so the
+# image must stay torch-free (CI enforces this). Regenerate with pip's
+# cross-platform resolver:
+#   pip install --dry-run --ignore-installed --report report.json
+#     --python-version 3.12 --platform manylinux_2_39_x86_64
+#     --platform manylinux_2_35_x86_64 --platform manylinux_2_28_x86_64
+#     --implementation cp --abi cp312 --abi abi3 --abi none
+#     --only-binary=:all: -c requirements.lock -r <base-deps.txt>
+# Note: pip evaluates env markers against the host, so Linux-only extras like
+# uvloop are absent - same as the full image (requirements.lock has no uvloop
+# either); uvicorn falls back to the asyncio loop.
+alembic==1.18.5
+annotated-doc==0.0.4
+annotated-types==0.7.0
+anyio==4.14.1
+APScheduler==3.11.3
+asyncpg==0.31.0
+beautifulsoup4==4.15.0
+certifi==2026.6.17
+cffi==2.0.0
+charset-normalizer==3.4.7
+click==8.4.2
+colorama==0.4.6
+cryptography==49.0.0
+curl_cffi==0.15.0
+distro==1.9.0
+fastapi==0.139.0
+fsspec==2026.2.0
+google-auth==2.55.1
+google-genai==2.10.0
+greenlet==3.5.3
+h11==0.16.0
+httpcore==1.0.9
+httptools==0.8.0
+httpx==0.28.1
+idna==3.18
+jiter==0.16.0
+Mako==1.3.12
+markdown-it-py==4.2.0
+MarkupSafe==3.0.3
+mdurl==0.1.2
+msgspec==0.21.1
+multitasking==0.0.13
+nautilus_trader==1.230.0
+numpy==2.5.1
+openai==2.44.0
+pandas==3.0.3
+peewee==4.1.1
+pgvector==0.5.0
+platformdirs==4.10.0
+portion==2.6.2
+prometheus-fastapi-instrumentator==8.0.2
+prometheus_client==0.25.0
+protobuf==7.35.1
+pyarrow==24.0.0
+pyasn1==0.6.3
+pyasn1_modules==0.4.2
+pycparser==3.0
+pydantic==2.13.4
+pydantic-settings==2.14.2
+pydantic_core==2.46.4
+Pygments==2.20.0
+PyJWT==2.13.0
+python-dateutil==2.9.0.post0
+python-dotenv==1.2.2
+pytz==2026.2
+PyYAML==6.0.3
+requests==2.34.2
+rich==15.0.0
+six==1.17.0
+sniffio==1.3.1
+sortedcontainers==2.4.0
+soupsieve==2.8.4
+SQLAlchemy==2.0.51
+starlette==1.3.1
+structlog==26.1.0
+tenacity==9.1.4
+tqdm==4.68.3
+typing-inspection==0.4.2
+typing_extensions==4.16.0
+tzdata==2026.2
+tzlocal==5.4.4
+urllib3==2.7.0
+uvicorn==0.50.1
+watchfiles==1.2.0
+websockets==16.0
+yfinance==1.5.1
