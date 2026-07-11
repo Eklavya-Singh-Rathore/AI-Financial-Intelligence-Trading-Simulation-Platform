@@ -139,12 +139,16 @@ Users → Vercel frontend → Render backend (slim, torch-free) → Supabase
 - **Expected behavioral delta vs localhost:** only latency — first request
   after an idle window (if keepalive missed) rides a ~1 min Render wake and/or
   a Space 503-wake poll; the proxy budget (300 s) absorbs it.
+- **Keepalive: ACTIVE** — GitHub Actions variable `BACKEND_LIVE_URL=
+  https://stock-ai-backend-gv17.onrender.com/live` is set and the `keepalive`
+  workflow was dispatch-verified green (pings `/live` every 10 min), so Render
+  no longer sleeps and the 13:00 UTC ingest fires.
 - **Remaining go-live steps (owner):** (1) set `BACKEND_URL=
   https://stock-ai-backend-gv17.onrender.com` in the frontend's Vercel project
-  (leave `BACKEND_API_KEY` empty) and redeploy; (2) set GitHub repo Actions
-  **variable** `BACKEND_LIVE_URL=https://stock-ai-backend-gv17.onrender.com/live`
-  so the keepalive workflow starts pinging; (3) browser E2E on the production
-  site after (1).
+  (leave `BACKEND_API_KEY` empty) and redeploy — this is the one wire left to
+  connect the deployed frontend to the backend (that Vercel account is not the
+  one reachable from this session); (2) browser E2E on the production site
+  after (1); (3) rotate the credentials in §8.
 
 ## 8. Security posture & owner actions
 
