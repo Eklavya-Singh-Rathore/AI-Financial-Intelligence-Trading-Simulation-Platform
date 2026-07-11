@@ -50,7 +50,7 @@ from pydantic import BaseModel, Field, model_validator
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("ai-inference-service")
 
-APP_VERSION = "0.2.2"  # 0.2: Gradio/ZeroGPU packaging (was Docker)
+APP_VERSION = "0.2.3"  # 0.2: Gradio/ZeroGPU packaging (was Docker)
 KRONOS_MODEL_ID = os.environ.get("KRONOS_MODEL_ID", "NeoQuasar/Kronos-small")
 KRONOS_TOKENIZER_ID = os.environ.get("KRONOS_TOKENIZER_ID", "NeoQuasar/Kronos-Tokenizer-base")
 EMBEDDING_MODEL_ID = os.environ.get(
@@ -274,9 +274,10 @@ def _attach_api(fastapi_app) -> None:  # noqa: ANN001 - gradio's FastAPI subclas
 # Module-level launch, like every classic Spaces app: the platform IMPORTS
 # app.py (a __main__ guard never runs there) and only auto-launches `demo`
 # itself when the import finishes without a live server - which would skip
-# the route attachment. So: launch non-blocking, bolt the REST routes onto
-# gradio's live FastAPI app, then block to keep the process alive (what a
-# plain blocking launch() would have done).
-served_app, _local_url, _share_url = demo.launch(prevent_thread_lock=True)
+# the route attachment. ssr_mode=False is required: gradio 6's SSR puts a
+# Node proxy on the public port that only forwards gradio routes, so custom
+# REST endpoints would 405. Launch non-blocking, bolt the REST routes onto
+# gradio's live FastAPI app, then block to keep the process alive.
+served_app, _local_url, _share_url = demo.launch(prevent_thread_lock=True, ssr_mode=False)
 _attach_api(served_app)
 threading.Event().wait()
