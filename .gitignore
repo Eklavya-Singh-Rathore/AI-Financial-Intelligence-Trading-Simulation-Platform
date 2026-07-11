@@ -33,6 +33,7 @@ hf_cache/
 node_modules/
 .next/
 frontend/.env*
+!frontend/.env.example
 
 # Editors / OS
 .vscode/
