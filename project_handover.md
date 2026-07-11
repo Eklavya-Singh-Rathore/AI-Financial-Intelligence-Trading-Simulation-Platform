@@ -86,13 +86,23 @@ shell/pre-deploy hooks).
   (was 106) incl. space-client taxonomy (503-wake, retries, token-leak guard),
   remote-forecaster contract, registry mode switch, remote-embeddings degrade;
   ruff/mypy clean; frontend `tsc` + `next build` clean.
-- **CI:** adds a kronos_src drift check (backend copy ↔ Space copy) and a slim
-  Render image build asserting it boots **torch-free**.
+- **CI:** **green on main** (first time — the integration job had failed since
+  the Phase-4 push on 0009's auth.users trigger, now guarded). Adds a
+  kronos_src drift check (backend copy ↔ Space copy) and a slim Render image
+  build asserting it boots **torch-free**.
 - **AI:** Gemini `gemini-2.5-flash` primary (free tier — 429s absorbed by 35s
   backoff); OpenAI fallback key has **no quota** (dead until funded); Kronos +
   Nautilus verified live on real data (Phase 3).
-- **Deployment:** frontend live on Vercel; HF Space + Render deployment
-  executed in Phase 4.5 — URLs + verification results in §7.
+- **Deployment:** frontend live on Vercel; HF Space + Render **deployed and
+  production-verified 2026-07-11** (§7). Live checks all passed: auth matrix
+  (anon 401 / X-API-Key 200 / 16 instruments), remote Kronos forecast (2.9 s
+  end-to-end, 616 ms Space inference), NautilusTrader backtest (2.2 s on the
+  512 MB instance), full agent run (completed, 7 messages, remote-embedding
+  memory writes), chat with RAG recall of the fresh agent decision, /metrics
+  gated. Two deploy-time fixes were needed and are documented: Supabase
+  DATABASE_URL must be the **aws-1-ap-south-1 pooler** form (Render is
+  IPv4-only), and migration 0009 now skips its auth.users trigger on
+  non-Supabase DBs (pre-existing Phase-4 CI failure).
 
 ## 7. Deployment (Phase 4.5 architecture)
 
@@ -129,6 +139,12 @@ Users → Vercel frontend → Render backend (slim, torch-free) → Supabase
 - **Expected behavioral delta vs localhost:** only latency — first request
   after an idle window (if keepalive missed) rides a ~1 min Render wake and/or
   a Space 503-wake poll; the proxy budget (300 s) absorbs it.
+- **Remaining go-live steps (owner):** (1) set `BACKEND_URL=
+  https://stock-ai-backend-gv17.onrender.com` in the frontend's Vercel project
+  (leave `BACKEND_API_KEY` empty) and redeploy; (2) set GitHub repo Actions
+  **variable** `BACKEND_LIVE_URL=https://stock-ai-backend-gv17.onrender.com/live`
+  so the keepalive workflow starts pinging; (3) browser E2E on the production
+  site after (1).
 
 ## 8. Security posture & owner actions
 
