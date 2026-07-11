@@ -2,8 +2,11 @@
 # (sdk_version in README.md front-matter) plus fastapi/uvicorn as its deps -
 # do not repin those here. torch is the standard PyPI build (ZeroGPU hosts
 # have NVIDIA drivers; our inference paths run on CPU and consume no quota).
+# ZeroGPU only supports specific torch versions (currently 2.8.0/2.9.1/
+# 2.10.0/2.11.0) - the backend's own lock may use a newer torch; that skew is
+# fine (Kronos needs >=2.2 and sampling is non-deterministic by design).
 spaces==0.51.0
-torch==2.12.1
+torch==2.11.0
 einops==0.8.2
 tqdm==4.68.3
 safetensors==0.8.0
