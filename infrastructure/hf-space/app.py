@@ -2,18 +2,22 @@
 
 Gradio-SDK Space on ZeroGPU hardware (HF's July-2026 policy gates Docker/
 cpu-basic Spaces behind PRO; ZeroGPU remains available to free accounts).
-The REST API is a FastAPI app with the Gradio UI mounted at /ui - the
-endpoints and JSON contracts are identical to the original Docker design, so
+The REST endpoints keep the JSON contracts of the original Docker design, so
 the backend's space_client needs no changes:
 
   GET  /health    liveness + model status (doubles as the keep-warm ping)
   POST /forecast  Kronos close-price forecast for one OHLCV context window
   POST /embed     MiniLM sentence embeddings (384-d, normalized by default)
 
+Serving model: the ZeroGPU harness holds port 7860 until gradio's own
+``demo.launch()`` performs the handoff (a self-run uvicorn dies with "address
+already in use"), so we launch gradio non-blocking and attach the REST routes
+to gradio's FastAPI app, prepended ahead of gradio's routes so no catch-all
+can shadow them.
+
 Inference runs on CPU: Kronos-small (24.7M params) takes a few seconds per
 forecast and consumes ZERO GPU quota. The @spaces.GPU-decorated button in the
-UI exists only to satisfy/verify the ZeroGPU runtime - the backend never
-calls it.
+UI exists only to verify the ZeroGPU runtime - the backend never calls it.
 
 Auth: a private Space is gated by Hugging Face itself (Bearer token). If the
 SPACE_API_KEY env/secret is set, /forecast and /embed additionally require a
@@ -40,14 +44,13 @@ except Exception:  # noqa: BLE001 - keep the API alive even if the hook breaks
 import gradio as gr
 import pandas as pd
 import torch
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("ai-inference-service")
 
-APP_VERSION = "0.2.0"  # 0.2: Gradio/ZeroGPU packaging (was Docker)
+APP_VERSION = "0.2.1"  # 0.2: Gradio/ZeroGPU packaging (was Docker)
 KRONOS_MODEL_ID = os.environ.get("KRONOS_MODEL_ID", "NeoQuasar/Kronos-small")
 KRONOS_TOKENIZER_ID = os.environ.get("KRONOS_TOKENIZER_ID", "NeoQuasar/Kronos-Tokenizer-base")
 EMBEDDING_MODEL_ID = os.environ.get(
@@ -75,9 +78,9 @@ EMBEDDER = SentenceTransformer(EMBEDDING_MODEL_ID, device="cpu")
 log.info("models ready")
 
 
-# ---- REST API ---------------------------------------------------------------
+# ---- REST API (attached to gradio's FastAPI at launch) ----------------------
 
-api = FastAPI(title="ai-inference-service", version=APP_VERSION)
+api = APIRouter()
 
 
 def _require_api_key(request: Request) -> None:
@@ -125,11 +128,6 @@ class EmbedRequest(BaseModel):
             if len(t) > 10_000:
                 raise ValueError("each text must be <= 10000 characters")
         return self
-
-
-@api.get("/")
-def root() -> RedirectResponse:
-    return RedirectResponse(url="/ui")
 
 
 @api.get("/health")
@@ -233,7 +231,7 @@ def embed(payload: EmbedRequest, request: Request) -> dict[str, Any]:
     }
 
 
-# ---- Gradio UI (mounted at /ui; also hosts the ZeroGPU smoke check) ---------
+# ---- Gradio UI (root page; also hosts the ZeroGPU smoke check) --------------
 
 
 def _gpu_smoke() -> str:
@@ -258,10 +256,25 @@ with gr.Blocks(title="ai-inference-service") as demo:
     out = gr.Textbox(label="result")
     btn.click(_gpu_smoke, outputs=out)
 
-app = gr.mount_gradio_app(api, demo, path="/ui")
+
+def _attach_api(fastapi_app) -> None:  # noqa: ANN001 - gradio's FastAPI subclass
+    """Attach the REST routes ahead of gradio's own (no catch-all shadowing)."""
+    fastapi_app.include_router(api)
+    ours = [
+        r
+        for r in fastapi_app.router.routes
+        if getattr(r, "path", None) in ("/health", "/forecast", "/embed")
+    ]
+    for route in ours:
+        fastapi_app.router.routes.remove(route)
+    fastapi_app.router.routes[:0] = ours
+    log.info("REST routes attached: /health /forecast /embed")
+
 
 if __name__ == "__main__":
-    import uvicorn
-
-    port = int(os.environ.get("GRADIO_SERVER_PORT", os.environ.get("PORT", "7860")))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    # The ZeroGPU harness owns port 7860 until gradio's launch() takes over -
+    # a self-run uvicorn dies with EADDRINUSE. Launch non-blocking, then bolt
+    # the REST routes onto gradio's live FastAPI app.
+    served_app, _local_url, _share_url = demo.launch(prevent_thread_lock=True)
+    _attach_api(served_app)
+    threading.Event().wait()  # keep the main thread (and server) alive

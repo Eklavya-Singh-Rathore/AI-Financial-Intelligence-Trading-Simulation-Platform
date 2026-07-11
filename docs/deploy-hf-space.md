@@ -8,15 +8,16 @@ that serves the ML models the Render backend no longer runs in-process:
 - **`POST /embed`** — **MiniLM** sentence embeddings
   (`sentence-transformers/all-MiniLM-L6-v2`, 384-d, normalized)
 - **`GET /health`** — open liveness/model status (doubles as the keep-warm ping)
-- **`/ui`** — human status page (Gradio) + ZeroGPU smoke-test button
+- **`/`** — human status page (Gradio) + ZeroGPU smoke-test button
 
 > **Why ZeroGPU, not Docker?** Hugging Face's July-2026 policy gates Docker
 > and cpu-basic Gradio Spaces behind PRO ($9/mo); ZeroGPU Spaces remain
-> available to free accounts. The app is a FastAPI mounted alongside a minimal
-> Gradio UI, so the REST contract is identical to the original Docker design —
-> the backend's `space_client` is packaging-agnostic. **All inference runs on
-> CPU** (Kronos-small is 24.7M params), so backend traffic consumes **no GPU
-> quota**; only the UI smoke-test button touches the GPU slice.
+> available to free accounts. The REST routes are attached to gradio's own
+> FastAPI server at launch (the ZeroGPU harness owns the port until
+> `launch()` runs), so the REST contract is identical to the original Docker
+> design — the backend's `space_client` is packaging-agnostic. **All inference
+> runs on CPU** (Kronos-small is 24.7M params), so backend traffic consumes
+> **no GPU quota**; only the UI smoke-test button touches the GPU slice.
 >
 > If the owner ever subscribes to PRO, the repo history contains the original
 > Docker packaging (Dockerfile + build-time weight bake) — commit `1e0b1db`.
