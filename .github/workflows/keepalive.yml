@@ -1,0 +1,23 @@
+# Keeps the Render free-tier backend awake (it spins down after 15 idle
+# minutes, which would silently skip the 13:00 UTC APScheduler ingest job).
+# 750 free instance-hours/month cover one always-on service, so pinging is
+# strictly better than sleeping. The backend itself keeps the Hugging Face
+# Space warm (space_keepalive scheduler job), so no HF token is needed here.
+#
+# Setup: repo Settings -> Secrets and variables -> Actions -> Variables ->
+#   BACKEND_LIVE_URL = https://<service>.onrender.com/live
+name: keepalive
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping backend /live
+        if: ${{ vars.BACKEND_LIVE_URL != '' }}
+        run: curl -fsS -m 45 --retry 2 --retry-delay 5 "${{ vars.BACKEND_LIVE_URL }}" > /dev/null && echo "backend awake"

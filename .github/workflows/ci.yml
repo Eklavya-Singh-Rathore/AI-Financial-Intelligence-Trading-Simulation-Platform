@@ -28,6 +28,9 @@ jobs:
       - name: Lint (ruff)
         run: ruff check app tests
 
+      - name: Kronos vendored-copy drift check (backend vs HF Space)
+        run: diff -r app/ml/kronos_src ../infrastructure/hf-space/kronos_src
+
       - name: Type-check (mypy)
         run: mypy app
 
@@ -119,3 +122,14 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build backend image
         run: docker build -t ai-fin-platform-backend:ci backend
+      - name: Build slim (Render) image
+        run: docker build -f backend/Dockerfile.render -t ai-fin-platform-backend:render backend
+      - name: Slim image boots without torch
+        run: |
+          docker run --rm ai-fin-platform-backend:render python -c "
+          import importlib.util, sys
+          assert importlib.util.find_spec('torch') is None, 'torch leaked into the slim image'
+          assert importlib.util.find_spec('sentence_transformers') is None, 'sentence-transformers leaked'
+          import app.main
+          print('slim image boots torch-free')
+          "

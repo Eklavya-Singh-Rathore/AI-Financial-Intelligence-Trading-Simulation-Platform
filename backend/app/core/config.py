@@ -60,6 +60,22 @@ class Settings(BaseSettings):
     kronos_max_context: int = 512
     kronos_device: str = "cpu"
 
+    # --- Remote inference (Phase 4.5: Hugging Face Space) ---
+    # "local" runs Kronos/MiniLM in-process (dev default); "remote" calls the
+    # inference Space at inference_space_url (POST /forecast, POST /embed).
+    # hf_token (above) authenticates against a private Space;
+    # inference_space_api_key is an optional shared-secret X-API-Key header
+    # (public-Space option). Both may be set together.
+    kronos_mode: str = "local"  # local | remote
+    embeddings_mode: str = "local"  # local | remote
+    inference_space_url: str = ""
+    inference_space_api_key: str = ""
+    inference_connect_timeout_seconds: float = 10.0
+    inference_read_timeout_seconds: float = 120.0
+    inference_max_retries: int = 2  # extra attempts after the first
+    inference_retry_backoff_seconds: float = 1.5
+    inference_wake_max_wait_seconds: float = 180.0  # budget while a slept Space wakes
+
     # --- Data ingestion / scheduler ---
     default_history_days: int = 1095
     enable_scheduler: bool = True

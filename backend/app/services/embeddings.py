@@ -1,9 +1,12 @@
-"""Semantic memory: local sentence-transformers embeddings + pgvector search.
+"""Semantic memory: MiniLM embeddings + pgvector search.
 
 Uses ``all-MiniLM-L6-v2`` (384 dims - matches the pre-existing
-``agent_embeddings.embedding vector(384)`` column). The model loads lazily on
-first use (~80 MB download once, cached by HF). All failures degrade to
-"memory off" behaviour: agents run fine without memory.
+``agent_embeddings.embedding vector(384)`` column). ``EMBEDDINGS_MODE``
+selects where vectors are computed: ``local`` loads sentence-transformers
+lazily in-process (~80 MB download once, cached by HF - dev default);
+``remote`` calls the same model on the inference Space (production, where the
+image ships without torch). All failures degrade to "memory off" behaviour:
+agents run fine without memory.
 
 Async correctness (audit CRIT-2): model load and ``encode`` are CPU-bound and
 always executed via ``asyncio.to_thread`` from the async entry points here.
@@ -32,6 +35,9 @@ _LOCK = threading.Lock()
 _MODEL: Any | None = None
 _MODEL_FAILED = False
 
+# Must match the agent_embeddings.embedding vector(384) column.
+_EXPECTED_DIM = 384
+
 
 def _get_model() -> Any | None:
     """Load the sentence-transformers model once; None if unavailable."""
@@ -51,13 +57,39 @@ def _get_model() -> Any | None:
         return _MODEL
 
 
+def _embed_remote(texts: list[str]) -> list[list[float]] | None:
+    """Compute vectors on the inference Space; None on any failure (memory off).
+
+    Unlike the local path there is no permanent-failure latch: remote failures
+    are usually transient (Space waking, network) and recover on the next call.
+    """
+    from app.services.space_client import get_space_client
+
+    try:
+        data = get_space_client().post_json(
+            "/embed", {"texts": texts, "normalize": True}, op="embed", retry_read_timeout=True
+        )
+        raw = data.get("vectors")
+        if not isinstance(raw, list) or len(raw) != len(texts):
+            raise ValueError("unexpected vector count")
+        vectors = [[float(x) for x in vec] for vec in raw]
+        if any(len(vec) != _EXPECTED_DIM for vec in vectors):
+            raise ValueError("unexpected embedding dimension")
+        return vectors
+    except Exception as exc:  # noqa: BLE001 - memory is optional
+        log.warning("embedding_remote_unavailable", error=str(exc)[:200])
+        return None
+
+
 def embed_texts(texts: list[str]) -> list[list[float]] | None:
     """Embed texts (BLOCKING - call via asyncio.to_thread from async code).
 
-    Returns None when the model is unavailable (memory disabled).
+    Returns None when embeddings are unavailable (memory disabled).
     """
     if not texts:
         return None
+    if get_settings().embeddings_mode.strip().lower() == "remote":
+        return _embed_remote(texts)
     model = _get_model()
     if model is None:
         return None

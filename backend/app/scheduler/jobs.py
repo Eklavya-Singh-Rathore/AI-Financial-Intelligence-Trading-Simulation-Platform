@@ -1,19 +1,25 @@
-"""APScheduler jobs - daily OHLCV ingest.
+"""APScheduler jobs - daily OHLCV ingest + inference-Space keep-warm ping.
 
 An in-process AsyncIOScheduler (no Celery, per the architecture decision). The
 daily job runs after the Indian market close (configurable UTC hour/minute) and
 ingests the last 7 days of bars for the whole universe - idempotent upserts make
-overlap harmless.
+overlap harmless. When remote inference is configured (Phase 4.5), a second
+lightweight job pings the Space's /health every 6 hours so the free-tier Space
+never reaches Hugging Face's ~48h idle shutdown.
 """
 
 from __future__ import annotations
 
+import asyncio
+from datetime import UTC, datetime, timedelta
+
 import structlog
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy import text
 
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.db.base import get_engine, get_sessionmaker
 from app.services import data_ingest
 
@@ -59,6 +65,25 @@ async def daily_ingest_job() -> None:
             )
 
 
+async def space_keepalive_job() -> None:
+    """Ping the inference Space so it never hits the free-tier idle shutdown.
+
+    Best-effort: a failed ping is logged and retried on the next interval.
+    """
+    from app.services.space_client import get_space_client
+
+    try:
+        health = await asyncio.to_thread(get_space_client().health)
+        log.info("space_keepalive_ok", status=str(health.get("status", "?"))[:32])
+    except Exception as exc:  # noqa: BLE001 - a failed ping must not kill the app
+        log.warning("space_keepalive_failed", error=str(exc)[:200])
+
+
+def _remote_inference_configured(settings: Settings) -> bool:
+    modes = (settings.kronos_mode.strip().lower(), settings.embeddings_mode.strip().lower())
+    return "remote" in modes and bool(settings.inference_space_url.strip())
+
+
 def start_scheduler() -> AsyncIOScheduler | None:
     """Start the scheduler if enabled. Returns the scheduler (or None)."""
     global _scheduler
@@ -81,11 +106,22 @@ def start_scheduler() -> AsyncIOScheduler | None:
         replace_existing=True,
         misfire_grace_time=3600,
     )
+    if _remote_inference_configured(settings):
+        scheduler.add_job(
+            space_keepalive_job,
+            IntervalTrigger(hours=6),
+            id="space_keepalive",
+            replace_existing=True,
+            # First ping shortly after boot warms the Space before real traffic.
+            next_run_time=datetime.now(UTC) + timedelta(seconds=60),
+            misfire_grace_time=3600,
+        )
     scheduler.start()
     _scheduler = scheduler
     log.info(
         "scheduler_started",
         daily_ingest_utc=f"{settings.daily_ingest_hour:02d}:{settings.daily_ingest_minute:02d}",
+        space_keepalive=_remote_inference_configured(settings),
     )
     return scheduler
 

@@ -7,17 +7,17 @@ market data, computes technical indicators, forecasts prices with the
 strategies on [NautilusTrader](https://nautilustrader.io). **No real trading** —
 simulation and analytics only.
 
-## Status: Phase 2.5 (hardening & audit remediation) complete
+## Status: Phase 4.5 — production deployment (Render + Hugging Face Space)
 
-All Critical and High findings from `AUDIT_REPORT.md` are remediated in code:
-API-key auth + rate limiting + run-concurrency caps, CPU/model work off the
-event loop, session-rollback discipline, orphan-run recovery + per-run
-timeouts, normalized LLM failover with retry classification, pooler-safe DB
-config, pinned dependencies (`backend/requirements.lock`), hardened non-root
-Docker image, prompt trust boundaries, fail-closed risk defaults, sanitized
-errors, request-ID logging, Prometheus `/metrics`, and a DB-integration test
-suite that runs in CI against a bootstrapped Postgres
-(`scripts/base_schema.sql`).
+Production architecture: **Vercel** (frontend) → **Render free tier** (slim
+FastAPI backend, no torch) → **Hugging Face Space** (`ai-inference-service`:
+official Kronos + MiniLM behind `POST /forecast` / `POST /embed`) →
+**Supabase** (Postgres + Auth). `KRONOS_MODE` / `EMBEDDINGS_MODE` switch
+between in-process models (`local`, the dev default) and the Space (`remote`,
+production) — same models, same API surface, same persisted `model_name`.
+Earlier phases: Supabase Auth + RBAC + per-user isolation (4), Next.js
+dashboard/chat (3), agents + RAG (2), audit hardening (2.5 — see
+`AUDIT_REPORT.md`), core platform (1).
 
 | Capability | State |
 |---|---|
@@ -25,6 +25,7 @@ suite that runs in CI against a bootstrapped Postgres
 | Technical indicators (SMA/EMA/RSI/MACD/Bollinger) | ✅ |
 | Forecasting — baseline drift model | ✅ |
 | Forecasting — Kronos (NeoQuasar/Kronos-small) | ✅ vendored + verified end-to-end (baseline stays as fallback) |
+| Remote inference — Kronos + MiniLM on a HF Space (`KRONOS_MODE`/`EMBEDDINGS_MODE=remote`) | ✅ |
 | Backtesting — NautilusTrader 1.230 + simple vectorized engine | ✅ |
 | Daily scheduler (APScheduler) | ✅ |
 | LLM layer — Gemini primary + OpenAI fallback + fake (tests) | ✅ (Gemini live-verified) |
@@ -57,11 +58,31 @@ backend/app/
 ├── core/            # settings (pydantic-settings), structlog config, domain constants
 ├── db/              # async SQLAlchemy engine/session
 ├── models/          # ORM: existing tables (read) + forecasts/backtests (owned)
-├── services/        # market_data, data_ingest, indicators, forecast/backtest orchestration
-├── ml/              # Forecaster interface, baseline + Kronos adapters, registry
+├── services/        # market_data, data_ingest, indicators, forecast/backtest, space_client
+├── ml/              # Forecaster interface, baseline + Kronos (local & remote), registry
 ├── backtesting/     # Backtester interface, NautilusTrader + simple engines, strategies
-└── scheduler/       # APScheduler daily ingest job
+└── scheduler/       # APScheduler: daily ingest + inference-Space keep-warm ping
 ```
+
+### Production topology (Phase 4.5)
+
+```
+Users ──► Vercel (Next.js frontend, same-origin proxy /api/backend/*)
+              │
+              ▼
+      Render free web service (backend/Dockerfile.render - no torch)
+      FastAPI · auth · agents · RAG · chat · NautilusTrader · APScheduler
+        │             │              │            │
+        ▼             ▼              ▼            ▼
+    Supabase     Gemini/OpenAI    NewsAPI    HF Space "ai-inference-service"
+   (PG+Auth)                                 (official Kronos + MiniLM,
+                                              /forecast /embed /health)
+```
+
+A GitHub Actions cron (`.github/workflows/keepalive.yml`) pings the backend
+every 10 minutes (Render free instances sleep after 15 idle minutes); the
+backend's scheduler pings the Space every 6 h so it never hits the ~48 h
+free-tier idle shutdown.
 
 ## Getting started
 
@@ -71,7 +92,7 @@ pre-existing market-data schema.
 ```bash
 cd backend
 python -m venv .venv && .venv/Scripts/activate    # Windows; use bin/activate on Unix
-pip install -e ".[dev]"
+pip install -e ".[dev,local-ml]"                  # local-ml = torch/MiniLM for local inference
 
 # configure
 cp ../.env.example ../.env                        # then fill in DATABASE_URL
@@ -119,14 +140,23 @@ uvicorn app.main:app --reload                     # Swagger at http://localhost:
 Symbols are the internal registry symbols (e.g. `RELIANCE`, `NIFTY50`, `GOLD`) —
 provider tickers like `RELIANCE.NS` are resolved via `instrument_provider_mappings`.
 
-### Enabling the Kronos forecaster
+### Kronos forecaster modes
 
-The Kronos runtime classes are not on PyPI. Copy `model/__init__.py`,
-`model/kronos.py`, `model/module.py` (and LICENSE) from
-[shiyu-coder/Kronos](https://github.com/shiyu-coder/Kronos) (MIT) into
-`backend/app/ml/kronos_src/`. Weights download automatically from Hugging Face
-(`NeoQuasar/Kronos-small` + `NeoQuasar/Kronos-Tokenizer-base`) on first use.
-Until then, `model=baseline` works and `model=kronos` returns a clear 503.
+`model=kronos` resolves through `KRONOS_MODE`:
+
+- **`local`** (dev default): the vendored official implementation
+  (`backend/app/ml/kronos_src/`, MIT) runs in-process; weights download
+  automatically from Hugging Face (`NeoQuasar/Kronos-small` +
+  `NeoQuasar/Kronos-Tokenizer-base`) on first use. Requires the `local-ml`
+  extra (torch).
+- **`remote`** (production): `RemoteKronosForecaster` POSTs the same context
+  window to the inference Space (`INFERENCE_SPACE_URL`) — see
+  [docs/deploy-hf-space.md](docs/deploy-hf-space.md). The Render image ships
+  without torch entirely. `EMBEDDINGS_MODE` does the same for MiniLM semantic
+  memory.
+
+Either way `model=baseline` always works, and a Kronos failure returns a clear
+503 (agent runs fall back to baseline automatically).
 
 ### Frontend (Phase 3)
 
@@ -151,7 +181,11 @@ ruff check app tests
 mypy app
 ```
 
-CI (GitHub Actions) runs ruff → mypy → fast tests → Docker build on every push/PR.
+CI (GitHub Actions) runs ruff → mypy → bandit → fast tests → pgvector
+integration tests → frontend tsc/build → Docker builds (full image **and** the
+slim Render image, asserting the latter boots torch-free) → a drift check
+keeping `infrastructure/hf-space/kronos_src` byte-identical to
+`backend/app/ml/kronos_src`.
 
 ### Local Postgres (optional)
 
@@ -163,16 +197,25 @@ prior repository, so a fresh local DB needs a one-time schema load, e.g.
 
 ## Deployment
 
-- **Frontend:** Vercel (root directory `frontend/`). Env vars:
+- **Frontend → Vercel** (root directory `frontend/`). Env vars:
   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `BACKEND_URL`
-  (the backend's public URL once hosted; leave `BACKEND_API_KEY` empty in
-  production — users authenticate with their own sessions).
-- **Backend:** any Docker host; the maintained runbook targets Oracle Cloud —
-  see [docs/deploy-oracle.md](docs/deploy-oracle.md)
-  (`infrastructure/docker-compose.prod.yml` runs the API behind Caddy with
-  automatic HTTPS). Not Vercel-deployable (multi-GB torch/nautilus image).
-- **Before production:** rotate every development credential (list in
-  docs/deploy-oracle.md) and create the least-privilege DB role.
+  (the Render URL; leave `BACKEND_API_KEY` empty in production — users
+  authenticate with their own sessions).
+- **Backend → Render free tier** (Docker, `backend/Dockerfile.render`,
+  blueprint `render.yaml`) — runbook: [docs/deploy-render.md](docs/deploy-render.md).
+  The slim image has no torch (~idle 230 MB, fits the 512 MB instance); a
+  GitHub Actions cron keeps it awake so the daily ingest fires.
+- **ML inference → Hugging Face Space** `ai-inference-service` (Docker, CPU
+  Basic free tier, private) serving the official Kronos + MiniLM — runbook:
+  [docs/deploy-hf-space.md](docs/deploy-hf-space.md). Weights are baked into
+  the image from the Hub at build time; nothing is re-uploaded.
+- **Every environment variable** (what, where, secret-or-not):
+  [docs/environment.md](docs/environment.md).
+- **Self-hosting alternative:** the full image (`backend/Dockerfile`, torch
+  included, `KRONOS_MODE=local`) still runs on any ≥2 GB Docker host via
+  `infrastructure/docker-compose.prod.yml` (API behind Caddy auto-HTTPS).
+- **Before production:** rotate every development credential and create the
+  least-privilege DB role (checklist in [docs/deploy-render.md](docs/deploy-render.md)).
 
 ## Security
 
@@ -184,5 +227,8 @@ prior repository, so a fresh local DB needs a one-time schema load, e.g.
 
 ## Documents
 
+- `docs/deploy-render.md` — backend deployment runbook (Render)
+- `docs/deploy-hf-space.md` — inference Space runbook (Hugging Face)
+- `docs/environment.md` — every environment variable, grouped, with where-to-set
 - `deep-research-report (1).md` — original planning/research document
 - `project_handover.md` — living status/handover document (kept current)

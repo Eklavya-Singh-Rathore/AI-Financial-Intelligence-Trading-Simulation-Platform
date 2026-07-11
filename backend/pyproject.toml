@@ -21,21 +21,27 @@ dependencies = [
     "yfinance>=0.2.40",
     "pandas>=2.2",
     "numpy>=1.26",
-    "torch>=2.2",
-    "huggingface-hub>=0.24",
-    "safetensors>=0.4",
-    "einops>=0.8",
     "tqdm>=4.66",
     "nautilus_trader==1.230.0",
     "google-genai>=1.0",
     "openai>=1.40",
     "pgvector>=0.3",
-    "sentence-transformers>=3.0",
     "prometheus-fastapi-instrumentator>=7.0",
     "pyjwt[crypto]>=2.9",
 ]
 
 [project.optional-dependencies]
+# In-process Kronos + MiniLM (KRONOS_MODE/EMBEDDINGS_MODE=local, the dev
+# default). The production Render image omits these (requirements-deploy.lock,
+# Dockerfile.render): remote mode calls the Hugging Face inference Space, so
+# torch never enters the 512 MB free-tier container.
+local-ml = [
+    "torch>=2.2",
+    "huggingface-hub>=0.24",
+    "safetensors>=0.4",
+    "einops>=0.8",
+    "sentence-transformers>=3.0",
+]
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.23",

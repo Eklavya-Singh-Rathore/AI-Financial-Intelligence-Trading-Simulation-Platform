@@ -6,6 +6,11 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 
+// Forecast, backtest and chat are single synchronous calls that may ride out
+// a Render cold start (~1 min) plus Hugging Face Space inference/wake-up.
+// 300s is the Hobby-plan ceiling with Fluid compute enabled.
+export const maxDuration = 300;
+
 const BACKEND_URL = process.env.BACKEND_URL ?? "http://127.0.0.1:8000";
 const API_KEY = process.env.BACKEND_API_KEY ?? "";
 
@@ -46,7 +51,7 @@ async function proxy(req: NextRequest, path: string[]): Promise<NextResponse> {
     upstream = await fetch(url, { method: req.method, headers, body, cache: "no-store" });
   } catch {
     return NextResponse.json(
-      { detail: "backend unreachable - is uvicorn running on port 8000?" },
+      { detail: "backend unreachable - check BACKEND_URL / backend status" },
       { status: 502 },
     );
   }

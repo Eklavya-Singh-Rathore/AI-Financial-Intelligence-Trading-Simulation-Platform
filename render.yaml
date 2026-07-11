@@ -1,0 +1,58 @@
+# Render Blueprint - backend web service (Phase 4.5).
+#
+# This file is the infrastructure-as-code record of the Render service; the
+# initial deployment was created via the Render API with identical settings
+# (docs/deploy-render.md). Secrets are `sync: false` - set them in the Render
+# dashboard (or via API), never in this file.
+#
+# Free-tier notes: 512 MB RAM / 0.1 CPU; the slim image (Dockerfile.render,
+# no torch) idles ~230 MB and peaks ~420 MB during a NautilusTrader backtest.
+# The instance sleeps after 15 min without traffic - the keepalive GitHub
+# Actions workflow (.github/workflows/keepalive.yml) pings /live every 10 min
+# so the 13:00 UTC ingest job actually fires.
+services:
+  - type: web
+    name: stock-ai-backend
+    runtime: docker
+    plan: free
+    region: singapore  # closest Render region to Supabase ap-south-1 (Mumbai)
+    dockerfilePath: backend/Dockerfile.render
+    dockerContext: backend
+    healthCheckPath: /live
+    autoDeployTrigger: commit
+    envVars:
+      - key: ENV
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+      - key: EXPOSE_ERROR_DETAILS
+        value: "false"
+      - key: ENABLE_SCHEDULER
+        value: "true"
+      - key: DEFAULT_FORECASTER
+        value: kronos
+      - key: KRONOS_MODE
+        value: remote
+      - key: EMBEDDINGS_MODE
+        value: remote
+      - key: INFERENCE_SPACE_URL
+        value: https://eklavya73-ai-inference-service.hf.space
+      # --- secrets: fill in the dashboard / via API ---
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: API_KEY
+        sync: false
+      - key: HF_TOKEN
+        sync: false
+      - key: GOOGLE_AI_STUDIO_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: NEWSAPI_KEY
+        sync: false

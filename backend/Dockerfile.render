@@ -1,0 +1,29 @@
+# Slim production image for Render (Phase 4.5): identical app, no local ML.
+# torch/sentence-transformers stay out (KRONOS_MODE=remote / EMBEDDINGS_MODE=
+# remote call the Hugging Face inference Space), keeping RSS inside Render's
+# 512 MB free tier. The full-fat image for self-hosting remains ./Dockerfile.
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+# Base-only pinned deps (Linux-resolved; CI asserts torch is absent).
+COPY requirements-deploy.lock pyproject.toml ./
+RUN pip install --upgrade pip && pip install -r requirements-deploy.lock
+
+COPY app ./app
+COPY alembic ./alembic
+COPY alembic.ini ./
+RUN pip install --no-deps .
+
+RUN useradd --create-home --uid 10001 appuser
+USER appuser
+
+EXPOSE 8000
+
+# Render injects PORT and probes healthCheckPath (/live) itself - no Docker
+# HEALTHCHECK needed. ${PORT:-8000} keeps plain `docker run` parity.
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
