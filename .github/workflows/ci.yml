@@ -112,6 +112,8 @@ jobs:
         run: npm ci
       - name: Typecheck
         run: npx tsc --noEmit
+      - name: Test (node:test)
+        run: npm test
       - name: Build
         run: npm run build
 

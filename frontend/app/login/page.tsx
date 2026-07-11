@@ -2,7 +2,7 @@
 
 import { CandlestickChart } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { authConfigured, supabaseBrowser } from "@/lib/supabase";
 
 export default function LoginPage() {
@@ -13,6 +13,40 @@ export default function LoginPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [guestEnabled, setGuestEnabled] = useState(false);
+  const [guestBusy, setGuestBusy] = useState(false);
+
+  // Ask the server whether a guest account is configured (keeps the credentials
+  // server-side). Only then do we show the "Continue as Guest" button.
+  useEffect(() => {
+    let active = true;
+    fetch("/api/guest")
+      .then((r) => r.json())
+      .then((d) => active && setGuestEnabled(Boolean(d?.enabled)))
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const continueAsGuest = async () => {
+    setGuestBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await fetch("/api/guest", { method: "POST" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error ?? "guest sign-in failed");
+      }
+      router.push("/");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setGuestBusy(false);
+    }
+  };
 
   if (!authConfigured()) {
     return (
@@ -93,6 +127,23 @@ export default function LoginPage() {
         >
           {mode === "signin" ? "No account? Sign up" : "Have an account? Sign in"}
         </button>
+        {guestEnabled && (
+          <>
+            <div className="flex items-center gap-2 pt-1 text-[10px] uppercase tracking-wide text-ink-3">
+              <span className="h-px flex-1 bg-line" />
+              or
+              <span className="h-px flex-1 bg-line" />
+            </div>
+            <button
+              type="button"
+              onClick={continueAsGuest}
+              disabled={guestBusy || busy}
+              className="w-full rounded-md border border-line px-3 py-2 text-sm font-medium text-ink hover:border-accent disabled:opacity-50"
+            >
+              {guestBusy ? "…" : "Continue as Guest"}
+            </button>
+          </>
+        )}
       </form>
       <p className="mt-4 text-center text-xs text-ink-3">
         Decision-support research only — no real trading.

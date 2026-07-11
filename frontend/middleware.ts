@@ -41,7 +41,9 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Everything except static assets and the backend proxy (which enforces its
-  // own auth by forwarding the user's Bearer token to FastAPI).
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/backend).*)"],
+  // Everything except static assets, the backend proxy (which enforces its own
+  // auth by forwarding the user's Bearer token to FastAPI), and the guest
+  // sign-in route (which must be reachable while unauthenticated to establish
+  // the guest session — otherwise the guard would redirect it to /login).
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/backend|api/guest).*)"],
 };
