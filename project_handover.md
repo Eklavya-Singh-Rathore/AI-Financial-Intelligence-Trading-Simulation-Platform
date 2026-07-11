@@ -107,9 +107,9 @@ Users → Vercel frontend → Render backend (slim, torch-free) → Supabase
   **`BACKEND_URL` = the Render URL** (leave `BACKEND_API_KEY` empty in prod).
 - **Backend → Render free web service** (Docker `backend/Dockerfile.render`,
   blueprint `render.yaml`, region Singapore, health `/live`, auto-deploy from
-  `main`). Runbook + free-tier evaluation: `docs/deploy-render.md`.
-  Backend URL: `https://stock-ai-backend.onrender.com` *(confirm in the Render
-  dashboard if the service name was adjusted at create time)*.
+  `main`; service `srv-d995r0faqgkc73fpjfsg`, created via API 2026-07-11).
+  Runbook + free-tier evaluation: `docs/deploy-render.md`.
+  Backend URL: **`https://stock-ai-backend-gv17.onrender.com`**.
 - **Inference → HF Space** `Eklavya73/ai-inference-service` (private,
   **Gradio SDK on ZeroGPU** — HF's July-2026 policy gates Docker/cpu-basic
   Spaces behind PRO, so the free path is ZeroGPU with CPU-only inference that

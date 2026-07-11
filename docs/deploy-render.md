@@ -40,6 +40,12 @@ Docker VM via `infrastructure/docker-compose.prod.yml`.
 - **Env vars:** plain values live in `render.yaml`; secrets are `sync: false`
   and must be set in the dashboard/API. Full reference:
   [docs/environment.md](environment.md)
+- **`DATABASE_URL` must be the Supabase *pooler* URL** —
+  `postgresql+asyncpg://postgres.<ref>:<pw>@aws-0-ap-south-1.pooler.supabase.com:6543/postgres`.
+  Render egress is IPv4-only and Supabase direct hosts (`db.<ref>.supabase.co`)
+  resolve to IPv6 only → the app boots but every DB call fails with `OSError`
+  (found the hard way on first deploy). The backend auto-detects pooler URLs
+  and disables the asyncpg statement cache for PgBouncer compatibility.
 
 `CORS_ORIGINS` stays **unset** on purpose: browsers only ever call the Vercel
 same-origin proxy, which forwards server-side — no cross-origin browser

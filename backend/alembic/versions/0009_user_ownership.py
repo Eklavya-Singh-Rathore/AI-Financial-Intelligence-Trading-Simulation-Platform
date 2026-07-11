@@ -24,26 +24,42 @@ depends_on: str | Sequence[str] | None = None
 
 OWNED_TABLES = ("chat_sessions", "agent_runs", "backtests", "forecasts")
 
+# auth.users only exists on Supabase. On a plain Postgres (CI integration job,
+# local compose) the trigger is skipped with a NOTICE - the app's role checks
+# simply see no admins, which is the correct fresh-DB behaviour.
 ADMIN_TRIGGER = """
-CREATE OR REPLACE FUNCTION public.grant_admin_role()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
+DO $do$
 BEGIN
-    IF NEW.email IN ('esr.arsenal.07@gmail.com', 'rathore.eklavya72@gmail.com') THEN
-        NEW.raw_app_meta_data :=
-            coalesce(NEW.raw_app_meta_data, '{}'::jsonb) || '{"role": "admin"}'::jsonb;
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'auth' AND table_name = 'users'
+    ) THEN
+        RAISE NOTICE 'auth.users not present (not a Supabase DB) - skipping admin trigger';
+        RETURN;
     END IF;
-    RETURN NEW;
-END;
-$$;
 
-DROP TRIGGER IF EXISTS grant_admin_role_on_signup ON auth.users;
-CREATE TRIGGER grant_admin_role_on_signup
-    BEFORE INSERT ON auth.users
-    FOR EACH ROW EXECUTE FUNCTION public.grant_admin_role();
+    EXECUTE $fn$
+        CREATE OR REPLACE FUNCTION public.grant_admin_role()
+        RETURNS trigger
+        LANGUAGE plpgsql
+        SECURITY DEFINER
+        SET search_path = public
+        AS $$
+        BEGIN
+            IF NEW.email IN ('esr.arsenal.07@gmail.com', 'rathore.eklavya72@gmail.com') THEN
+                NEW.raw_app_meta_data :=
+                    coalesce(NEW.raw_app_meta_data, '{}'::jsonb) || '{"role": "admin"}'::jsonb;
+            END IF;
+            RETURN NEW;
+        END;
+        $$;
+    $fn$;
+    EXECUTE 'DROP TRIGGER IF EXISTS grant_admin_role_on_signup ON auth.users';
+    EXECUTE 'CREATE TRIGGER grant_admin_role_on_signup '
+            'BEFORE INSERT ON auth.users '
+            'FOR EACH ROW EXECUTE FUNCTION public.grant_admin_role()';
+END
+$do$;
 """
 
 
@@ -55,7 +71,20 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute("DROP TRIGGER IF EXISTS grant_admin_role_on_signup ON auth.users")
+    op.execute(
+        """
+        DO $do$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.tables
+                WHERE table_schema = 'auth' AND table_name = 'users'
+            ) THEN
+                EXECUTE 'DROP TRIGGER IF EXISTS grant_admin_role_on_signup ON auth.users';
+            END IF;
+        END
+        $do$;
+        """
+    )
     op.execute("DROP FUNCTION IF EXISTS public.grant_admin_role()")
     for table in reversed(OWNED_TABLES):
         op.drop_index(f"ix_{table}_user_id", table_name=table)

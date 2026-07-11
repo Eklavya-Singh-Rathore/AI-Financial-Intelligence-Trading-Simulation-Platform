@@ -25,7 +25,7 @@ app boots with partial config and degrades explicitly).
 
 | Variable | Default | Secret | Where set | Purpose |
 |---|---|---|---|---|
-| `DATABASE_URL` | *(empty)* | **yes** | local, Render | asyncpg URL (direct or pooler; pooler auto-detected). Functionally required |
+| `DATABASE_URL` | *(empty)* | **yes** | local, Render | asyncpg URL. **On Render it must be the pooler form** (`postgres.<ref>@aws-0-ap-south-1.pooler.supabase.com:6543`) — direct `db.<ref>` hosts are IPv6-only and unreachable from Render's IPv4 egress. Pooler auto-detected (statement cache off). Functionally required |
 | `DB_STATEMENT_CACHE_SIZE` | auto | no | rarely | override asyncpg statement cache (pooler compat is automatic) |
 
 ## Supabase Auth (backend + frontend)
