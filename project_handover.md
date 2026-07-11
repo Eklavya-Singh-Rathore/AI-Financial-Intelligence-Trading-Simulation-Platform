@@ -115,8 +115,8 @@ Users → Vercel frontend → Render backend (slim, torch-free) → Supabase
   Spaces behind PRO, so the free path is ZeroGPU with CPU-only inference that
   consumes no GPU quota): official Kronos (`NeoQuasar/Kronos-small` +
   `Kronos-Tokenizer-base`) + MiniLM, endpoints `/forecast` `/embed` `/health`
-  (+ `/ui` status page). Weights download on cold start (~350 MB; keep-warm
-  makes that rare). Runbook: `docs/deploy-hf-space.md`.
+  (+ Gradio status page at `/`). Weights download on cold start (~350 MB;
+  keep-warm makes that rare). Runbook: `docs/deploy-hf-space.md`.
   URL: `https://eklavya73-ai-inference-service.hf.space`.
 - **Keep-alive:** GH Actions `keepalive.yml` pings backend `/live` every
   10 min (repo variable `BACKEND_LIVE_URL`); the backend scheduler pings the
