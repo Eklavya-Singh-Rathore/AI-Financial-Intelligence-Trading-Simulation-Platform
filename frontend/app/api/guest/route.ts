@@ -19,7 +19,18 @@ function guestConfigured(): boolean {
 // Lets the login page show the button only when guest access is available,
 // without exposing whether/what the credentials are.
 export async function GET() {
-  return NextResponse.json({ enabled: guestConfigured() });
+  return NextResponse.json({
+    enabled: guestConfigured(),
+    // TEMP DIAGNOSTIC (Phase 4.6) — non-sensitive; remove after verifying guest login.
+    _debug: {
+      supabaseRef: (process.env.NEXT_PUBLIC_SUPABASE_URL || "")
+        .replace(/^https?:\/\//, "")
+        .split(".")[0],
+      hasAnon: Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
+      guestEmail: process.env.GUEST_EMAIL || null,
+      guestPwLen: (process.env.GUEST_PASSWORD || "").length,
+    },
+  });
 }
 
 export async function POST() {
