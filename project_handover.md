@@ -95,8 +95,15 @@ backend as `postgres`; Supabase REST API locked). Migrations manual
   (migration 0010; warnings cleared).
 - **Frontend:** every page renders; charts; light/dark theme; responsive (no
   horizontal overflow at mobile); loading/error states; no console errors — ✅.
-- **Bug found + fixed:** middleware guarded `/api/guest` and redirected the
-  guest sign-in to `/login` (broke guest login) → excluded it + regression test.
+- **Bugs found + fixed (2):** (1) middleware guarded `/api/guest` and
+  redirected the guest sign-in to `/login` (broke guest login) → excluded it +
+  regression test. (2) **`NEXT_PUBLIC_SUPABASE_URL` in Vercel had a leading BOM/
+  invisible character**, producing a malformed Supabase URL that broke ALL
+  server-side auth in production (guest sign-in 401, and the
+  prod-frontend→prod-backend JWT flow) → re-set clean `NEXT_PUBLIC_SUPABASE_*`
+  via the Vercel API + fresh rebuild. **Guest login now production-verified**:
+  "Continue as Guest" → authenticated dashboard → guest JWT accepted by the
+  Render backend (health + instruments/summary 200).
 
 ### Testing
 
