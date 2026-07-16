@@ -13,6 +13,7 @@ from app.models.forecast import Forecast
 from app.models.instrument import Instrument
 from app.models.price_bar import PriceBar
 from app.models.provider import DataProvider, InstrumentProviderMapping
+from app.models.simulation import SimOrder, SimPortfolio, SimPosition, SimTrade
 
 __all__ = [
     "Instrument",
@@ -26,4 +27,8 @@ __all__ = [
     "AgentEmbedding",
     "ChatSession",
     "ChatMessage",
+    "SimPortfolio",
+    "SimOrder",
+    "SimTrade",
+    "SimPosition",
 ]

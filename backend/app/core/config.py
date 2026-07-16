@@ -114,6 +114,14 @@ class Settings(BaseSettings):
     agent_run_stale_minutes: int = 30  # startup sweep marks older running runs failed
     memory_ttl_days: int = 90  # embeddings older than this are purged
 
+    # --- Paper trading / research / evaluation (Phase 5) ---
+    sim_starting_cash: float = 1_000_000.0  # paper portfolio starting cash (INR)
+    fundamentals_ttl_hours: int = 24  # yfinance fundamentals cache TTL
+    enable_news_ingest: bool = True  # daily scheduler job persisting news into RAG
+    # Cost estimation only (per 1M tokens, USD) - configurable per provider price list.
+    llm_cost_input_per_1m: float = 0.30
+    llm_cost_output_per_1m: float = 2.50
+
     @property
     def async_database_url(self) -> str:
         """Return the DATABASE_URL normalised to the asyncpg driver."""
