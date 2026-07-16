@@ -390,7 +390,11 @@ async def place_order(
         try:
             await _apply_fill(session, portfolio, order, price)
         except SimulationError:
+            # Roll back the uncommitted order/fill, then refresh the portfolio:
+            # rollback expires all ORM instances, and a lazy refresh from async
+            # code raises MissingGreenlet on the next attribute access.
             await session.rollback()
+            await session.refresh(portfolio)
             raise
     await session.commit()
     await session.refresh(order)
@@ -655,7 +659,9 @@ async def accept_proposal(
     try:
         await _apply_fill(session, portfolio, order, price)
     except SimulationError:
-        await session.rollback()
+        await session.rollback()  # order stays proposed
+        await session.refresh(portfolio)
+        await session.refresh(order)
         raise
     await session.commit()
     await session.refresh(order)

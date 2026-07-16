@@ -13,7 +13,7 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.routers import agents, backtest, chat, health, ingest, instruments
+from app.api.routers import agents, backtest, chat, health, ingest, instruments, simulation
 from app.core.auth import get_auth, warn_if_user_auth_disabled
 from app.core.config import get_settings
 from app.core.logging import configure_logging
@@ -77,7 +77,14 @@ if _cors:
 # Protected business routers, mounted at both the legacy root and /api/v1.
 # The root mount is kept for backward compatibility; /api/v1 is canonical.
 # get_auth accepts EITHER the service X-API-Key OR a Supabase user JWT (Phase 4).
-_PROTECTED = [instruments.router, ingest.router, backtest.router, agents.router, chat.router]
+_PROTECTED = [
+    instruments.router,
+    ingest.router,
+    backtest.router,
+    agents.router,
+    chat.router,
+    simulation.router,
+]
 _auth = [Depends(get_auth)]
 for router in _PROTECTED:
     app.include_router(router, dependencies=_auth)

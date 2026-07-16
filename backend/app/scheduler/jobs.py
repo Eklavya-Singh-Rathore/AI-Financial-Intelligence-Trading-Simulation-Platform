@@ -27,8 +27,9 @@ log = structlog.get_logger(__name__)
 
 _scheduler: AsyncIOScheduler | None = None
 
-# Cluster-wide advisory lock key for the daily ingest (any stable int64).
+# Cluster-wide advisory lock keys (any stable int64).
 DAILY_INGEST_LOCK_KEY = 815_001
+SIM_SWEEP_LOCK_KEY = 815_002
 
 
 async def daily_ingest_job() -> None:
@@ -62,6 +63,62 @@ async def daily_ingest_job() -> None:
         finally:
             await lock_conn.execute(
                 text("SELECT pg_advisory_unlock(:key)"), {"key": DAILY_INGEST_LOCK_KEY}
+            )
+
+
+async def sim_order_sweep_job() -> None:
+    """Evaluate resting limit/stop paper orders against newly ingested bars.
+
+    Runs shortly after the daily ingest; also triggered lazily on portfolio
+    reads, so this job just guarantees fills happen even for idle users.
+    Advisory-locked for single-flight across replicas.
+    """
+    from sqlalchemy import select
+
+    from app.models.simulation import SimOrder, SimPortfolio
+    from app.services import simulation
+
+    engine = get_engine()
+    async with engine.connect() as lock_conn:
+        got_lock = (
+            await lock_conn.execute(
+                text("SELECT pg_try_advisory_lock(:key)"), {"key": SIM_SWEEP_LOCK_KEY}
+            )
+        ).scalar()
+        if not got_lock:
+            log.info("sim_sweep_skipped", reason="another instance holds the lock")
+            return
+        try:
+            sm = get_sessionmaker()
+            async with sm() as session:
+                portfolio_ids = (
+                    (
+                        await session.execute(
+                            select(SimOrder.portfolio_id)
+                            .where(SimOrder.status == "open")
+                            .distinct()
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                total = 0
+                for pid in portfolio_ids:
+                    portfolio = (
+                        await session.execute(
+                            select(SimPortfolio).where(SimPortfolio.id == pid)
+                        )
+                    ).scalar_one_or_none()
+                    if portfolio is not None:
+                        total += await simulation.sweep_open_orders(session, portfolio)
+                log.info(
+                    "sim_sweep_finished", portfolios=len(portfolio_ids), fills=total
+                )
+        except Exception as exc:  # noqa: BLE001 - a failed job must not kill the app
+            log.error("sim_sweep_failed", error=str(exc), exc_info=True)
+        finally:
+            await lock_conn.execute(
+                text("SELECT pg_advisory_unlock(:key)"), {"key": SIM_SWEEP_LOCK_KEY}
             )
 
 
@@ -103,6 +160,16 @@ def start_scheduler() -> AsyncIOScheduler | None:
             timezone="UTC",
         ),
         id="daily_ingest",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+    # Sweep resting paper orders ~15 min after the daily ingest lands new bars.
+    sweep_minute = (settings.daily_ingest_minute + 15) % 60
+    sweep_hour = (settings.daily_ingest_hour + (settings.daily_ingest_minute + 15) // 60) % 24
+    scheduler.add_job(
+        sim_order_sweep_job,
+        CronTrigger(hour=sweep_hour, minute=sweep_minute, timezone="UTC"),
+        id="sim_order_sweep",
         replace_existing=True,
         misfire_grace_time=3600,
     )
