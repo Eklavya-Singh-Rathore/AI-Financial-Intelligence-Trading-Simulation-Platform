@@ -21,7 +21,7 @@ from app.schemas.market import (
     PriceBarOut,
     PriceSeriesOut,
 )
-from app.services import forecast_service, market_data
+from app.services import forecast_service, market_data, research
 from app.services.indicators import SUPPORTED_INDICATORS, compute_indicators
 
 router = APIRouter(prefix="/instruments", tags=["instruments"])
@@ -164,3 +164,74 @@ async def get_forecast(
         points=points,
         meta=run.result.meta,
     )
+
+
+# --- Financial research (Phase 5) -------------------------------------------
+
+
+@router.get("/{symbol}/profile")
+async def get_profile(
+    symbol: str,
+    auth: Annotated[AuthContext, Depends(get_auth)],
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Company profile + business summary (yfinance, cached; degrades to DB)."""
+    try:
+        data = await research.get_fundamentals(session, symbol)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {
+        "symbol": symbol.upper(),
+        "profile": data["profile"],
+        "fetched_at": data["fetched_at"],
+        "source": data["source"],
+    }
+
+
+@router.get("/{symbol}/financials")
+async def get_financials(
+    symbol: str,
+    auth: Annotated[AuthContext, Depends(get_auth)],
+    period: str = Query(default="annual", pattern="^(annual|quarterly)$"),
+    statement: str = Query(default="income", pattern="^(income|balance|cashflow)$"),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Financial statements (annual/quarterly income, balance sheet, cashflow)."""
+    try:
+        data = await research.get_fundamentals(session, symbol)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if statement == "income":
+        stmt = data["income_quarterly"] if period == "quarterly" else data["income_annual"]
+    elif statement == "balance":
+        stmt = data["balance_sheet"]  # annual only from yfinance
+    else:
+        stmt = data["cashflow"]  # annual only from yfinance
+    return {
+        "symbol": symbol.upper(),
+        "period": period,
+        "statement": statement,
+        "data": stmt,
+        "fetched_at": data["fetched_at"],
+        "source": data["source"],
+    }
+
+
+@router.get("/{symbol}/earnings")
+async def get_earnings(
+    symbol: str,
+    auth: Annotated[AuthContext, Depends(get_auth)],
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Earnings analysis derived from quarterly income (trend + QoQ/YoY growth)."""
+    try:
+        data = await research.get_fundamentals(session, symbol)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    analysis = research.derive_earnings(data["income_quarterly"])
+    return {
+        "symbol": symbol.upper(),
+        **analysis,
+        "fetched_at": data["fetched_at"],
+        "source": data["source"],
+    }

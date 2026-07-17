@@ -38,6 +38,9 @@ class Instrument(Base):
     isin: Mapped[str | None] = mapped_column(String, nullable=True)
     instrument_type: Mapped[str] = mapped_column(instrument_type_enum, nullable=False)
     exchange_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    # Classification FKs (sectors/industries lookup tables) - Phase 5 research.
+    sector_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    industry_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     currency: Mapped[str] = mapped_column(String, nullable=False)
     country: Mapped[str] = mapped_column(String, nullable=False)
     status: Mapped[str] = mapped_column(instrument_status_enum, nullable=False)

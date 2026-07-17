@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import clsx from "clsx";
 import { CandleChart } from "@/components/CandleChart";
+import { ResearchSection } from "@/components/ResearchSection";
 import { api, fmtNum, fmtPct, polarity } from "@/lib/api";
 
 const METRIC_LABELS: Record<string, string> = {
@@ -166,6 +167,8 @@ export default function InstrumentPage() {
           </div>
         )}
       </div>
+
+      <ResearchSection symbol={symbol} />
     </div>
   );
 }
