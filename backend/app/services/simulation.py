@@ -139,7 +139,16 @@ def build_equity_curve(
 
     holdings = pd.Series(0.0, index=calendar)
     for inst, q in qty.items():
-        px = closes[inst].reindex(calendar).ffill().fillna(0.0)
+        # ffill over the union of history + calendar so calendar days past the
+        # last bar (day-one portfolios, weekends) value at the last known close
+        # instead of 0 (reindex-then-ffill would drop the history first).
+        series = closes[inst]
+        px = (
+            series.reindex(series.index.union(calendar))
+            .ffill()
+            .reindex(calendar)
+            .fillna(0.0)
+        )
         holdings += q * px
 
     equity = cash + holdings

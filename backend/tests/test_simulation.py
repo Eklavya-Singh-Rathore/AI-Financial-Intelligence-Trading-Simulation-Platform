@@ -139,6 +139,31 @@ def test_equity_curve_round_trip_realizes_cash():
     assert list(curve["equity"].round(2)) == [1000.0, 1100.0, 1100.0]
 
 
+def test_equity_curve_day_one_portfolio_ffills_last_close():
+    """Regression: portfolio created AFTER the last bar (e.g. bought today
+    before today's ingest). The single calendar day must value holdings at the
+    last known close, not 0 (reindex-then-ffill dropped the history)."""
+    closes = {"inst1": _closes(["2026-07-15", "2026-07-16"], [95.0, 100.0])}
+    trades = [_trade("2026-07-17", "buy", 10, 100.0)]
+    curve = build_equity_curve(Decimal("2000"), pd.Timestamp("2026-07-17"), trades, closes)
+    assert len(curve) == 1
+    # cash 2000 - 1000 = 1000; holdings 10 * ffilled close 100 = 1000
+    assert float(curve["holdings"].iloc[0]) == 1000.0
+    assert float(curve["equity"].iloc[0]) == 2000.0
+
+
+def test_equity_curve_weekend_gap_ffills():
+    """Calendar days past an instrument's last bar keep the last close."""
+    closes = {
+        "inst1": _closes(["2026-07-01", "2026-07-02"], [100.0, 110.0]),
+        "inst2": _closes(["2026-07-01", "2026-07-02", "2026-07-03"], [50.0, 50.0, 60.0]),
+    }
+    trades = [_trade("2026-07-01", "buy", 10, 100.0, inst="inst1")]
+    curve = build_equity_curve(Decimal("1000"), pd.Timestamp("2026-07-01"), trades, closes)
+    # inst2's 07-03 bar extends the calendar; inst1 has no 07-03 bar -> ffill 110.
+    assert list(curve["equity"].round(2)) == [1000.0, 1100.0, 1100.0]
+
+
 # --- metrics -------------------------------------------------------------------
 
 
