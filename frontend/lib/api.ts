@@ -116,6 +116,35 @@ export type OrderCreate = {
   qty: number; limit_price?: number; stop_price?: number;
 };
 
+export type EvaluationSummary = {
+  forecast_accuracy: {
+    models: Record<string, { evaluated_points: number; mape_pct: number; bias_pct: number }>;
+    evaluated_points: number;
+  };
+  agents: {
+    runs_by_status: Record<string, number>;
+    action_mix: Record<string, number>;
+    avg_confidence: number | null;
+    stance_agreement_pct: number | null;
+    stance_pairs_evaluated: number;
+  };
+  recommendation_success: {
+    evaluated: number;
+    success_rate: number | null;
+    avg_return_pct: number | null;
+    by_action: Record<string, { n: number; avg_return_pct: number }>;
+  };
+  usage: {
+    runs_window: number;
+    llm_calls: number;
+    input_tokens: number;
+    output_tokens: number;
+    est_cost_usd: number;
+    avg_run_seconds: number | null;
+    avg_message_latency_ms: number | null;
+  };
+};
+
 export type RunExplanation = {
   run_id: string; symbol: string; status: string; as_of: string | null;
   decision: Record<string, unknown>;
@@ -210,6 +239,7 @@ export const api = {
   run: (id: string) => request<AgentRun>(`agents/runs/${id}`),
   runMessages: (id: string) => request<AgentMessage[]>(`agents/runs/${id}/messages`),
   runExplanation: (id: string) => request<RunExplanation>(`agents/runs/${id}/explanation`),
+  evaluationSummary: () => request<EvaluationSummary>("evaluation/summary"),
   startRun: (symbol: string) =>
     request<AgentRun>("agents/run", { method: "POST", body: JSON.stringify({ symbol }) }),
   simPortfolio: () => request<SimPortfolio>("simulation/portfolio"),
