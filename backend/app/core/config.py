@@ -118,6 +118,8 @@ class Settings(BaseSettings):
     sim_starting_cash: float = 1_000_000.0  # paper portfolio starting cash (INR)
     fundamentals_ttl_hours: int = 24  # yfinance fundamentals cache TTL
     enable_news_ingest: bool = True  # daily scheduler job persisting news into RAG
+    news_rag_top_k: int = 5  # news headlines retrieved per chat message
+    news_retention_days: int = 180  # news documents older than this are purged
     # Cost estimation only (per 1M tokens, USD) - configurable per provider price list.
     llm_cost_input_per_1m: float = 0.30
     llm_cost_output_per_1m: float = 2.50

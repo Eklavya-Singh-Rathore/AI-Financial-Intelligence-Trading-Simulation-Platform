@@ -49,9 +49,17 @@ export type AgentMessage = {
 
 export type ChatSession = { id: string; title: string; created_at: string; updated_at: string };
 
+export type ChatCitation = {
+  n: number; title: string; url: string | null;
+  published_at: string | null; symbol: string | null;
+};
+
 export type ChatMessage = {
   id: string; seq: number; role: string; content: string;
-  context: { symbols?: string[]; decisions_used?: number; memory_notes_used?: number } | null;
+  context: {
+    symbols?: string[]; decisions_used?: number; memory_notes_used?: number;
+    news_used?: number; citations?: ChatCitation[];
+  } | null;
   usage: Record<string, number> | null; latency_ms: number | null; created_at: string;
 };
 

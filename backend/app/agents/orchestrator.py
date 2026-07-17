@@ -35,7 +35,14 @@ from app.llm.registry import get_llm_client
 from app.ml.base import ForecasterError
 from app.models.agent_run import AgentMessage, AgentRun
 from app.models.instrument import Instrument
-from app.services import backtest_service, embeddings, forecast_service, market_data, news
+from app.services import (
+    backtest_service,
+    embeddings,
+    forecast_service,
+    market_data,
+    news,
+    news_rag,
+)
 from app.services.backtest_service import BacktesterError
 from app.services.indicators import compute_indicators
 
@@ -129,11 +136,13 @@ async def gather_context(session: AsyncSession, instrument: Instrument) -> RunCo
         except BacktesterError:
             ctx.backtest = {"engine": "none", "error": str(exc)[:200]}
 
-    # News headlines (best effort).
+    # News headlines (best effort); persist them into the RAG corpus so chat
+    # citations grow organically with every run (Phase 5, never raises).
     headlines = await asyncio.to_thread(
         news.fetch_headlines, f'"{instrument.display_name}"'
     )
     ctx.headlines = [h.as_prompt_line() for h in headlines]
+    await news_rag.ingest_headlines(session, instrument.symbol, headlines)
 
     # Memory: similar past conclusions for this symbol.
     ctx.memory_notes = await _recall_notes(session, instrument.symbol, settings.agent_memory_top_k)
