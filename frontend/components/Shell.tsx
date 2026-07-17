@@ -9,6 +9,7 @@ import {
   MessageSquare,
   Moon,
   Sun,
+  Wallet,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -20,6 +21,7 @@ import { authConfigured, supabaseBrowser } from "@/lib/supabase";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/simulation", label: "Simulation", icon: Wallet },
   { href: "/agents", label: "Agents", icon: Bot },
   { href: "/chat", label: "Chat", icon: MessageSquare },
 ];
