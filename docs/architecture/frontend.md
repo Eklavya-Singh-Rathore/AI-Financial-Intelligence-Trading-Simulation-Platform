@@ -10,12 +10,15 @@ Deployed on Vercel (project root `frontend/`).
 |---|---|
 | `/login` | Sign in / sign up (Supabase browser client) + **Continue as Guest** |
 | `/` | Dashboard — 16-asset universe table with sparkline stats |
-| `/instruments/[symbol]` | Candles + SMA/EMA overlays + forecast overlay (Kronos/baseline); SMA-crossover backtest with metric tiles; "Analyze with agents" |
-| `/agents`, `/agents/[runId]` | Agent-run list + live-polling transcript & decision card |
-| `/chat` | Persisted chat sessions with grounded, context-chipped answers |
+| `/instruments/[symbol]` | Candles + SMA/EMA overlays + forecast overlay (Kronos/baseline); SMA-crossover backtest with metric tiles; "Analyze with agents"; **Research** (profile, earnings trend, statement tables) |
+| `/simulation` | Paper trading — portfolio tiles + positions, order ticket (market/limit/stop), open orders + AI proposals (accept/reject), trades, equity/drawdown chart + metrics, allocation bars, intelligence panel |
+| `/agents`, `/agents/[runId]` | Agent-run list + live-polling transcript & decision card; **explanation panel** (why/stances/indicators/forecast/backtest/risk at decision time) + **Send to Simulation** |
+| `/insights` | AI evaluation — forecast accuracy, agent stats, recommendation success, usage & cost + portfolio-intelligence digest |
+| `/chat` | Persisted chat sessions with grounded, context-chipped answers + **numbered news citations** (clickable) |
 
-Shared UI in `components/` (`Shell`, `CandleChart`, `RunBits`); API layer in
-`lib/api.ts`; Supabase browser client in `lib/supabase.ts`.
+Shared UI in `components/` (`Shell`, `CandleChart`, `RunBits`,
+`ResearchSection`, `sim/EquityChart`); API layer in `lib/api.ts`; Supabase
+browser client in `lib/supabase.ts`.
 
 ## The authenticated backend proxy
 

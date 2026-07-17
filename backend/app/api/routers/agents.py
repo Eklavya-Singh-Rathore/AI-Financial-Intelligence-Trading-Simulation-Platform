@@ -217,3 +217,19 @@ async def get_run_messages(
         select(AgentMessage).where(AgentMessage.run_id == run_id).order_by(AgentMessage.seq)
     )
     return [AgentMessageOut.model_validate(m) for m in result.scalars()]
+
+
+@router.get("/runs/{run_id}/explanation")
+async def get_run_explanation(
+    run_id: uuid.UUID,
+    auth: Auth,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Structured explanation of the recommendation (Phase 5, no LLM call)."""
+    from app.agents.explain import compose_explanation
+
+    run = await _get_run_or_404(session, run_id, auth)
+    result = await session.execute(
+        select(AgentMessage).where(AgentMessage.run_id == run_id).order_by(AgentMessage.seq)
+    )
+    return compose_explanation(run, list(result.scalars()))

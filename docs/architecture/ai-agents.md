@@ -32,7 +32,15 @@ gather_context (deterministic: prices, indicators, news, Kronos forecast, backte
    loosen these — they are enforced in code, not prompts.
 6. **Portfolio Manager** — final decision + rationale.
 
-Every step is persisted to `agent_messages`; the final decision to `agent_runs`.
+Every step is persisted to `agent_messages`; the final decision to
+`agent_runs`. **Phase 5:** the gather-time inputs (price summary, indicators,
+forecast, backtest, headlines) are also persisted on the run as
+`context_snapshot`, so `GET /agents/runs/{id}/explanation` composes a
+faithful, deterministic explanation of the recommendation (no LLM call);
+pre-snapshot runs degrade to message-derived sections. A completed BUY/SELL
+non-veto decision can be sent to the paper-trading simulator as a `proposed`
+order (human accept/reject — never auto-executed, see
+[ADR-0006](../adr/ADR-0006-paper-trading.md)).
 
 ## Orchestration & safety
 
@@ -62,8 +70,13 @@ Every step is persisted to `agent_messages`; the final decision to `agent_runs`.
 ## Chat / RAG
 
 `chat_service` grounds each answer in live universe stats + the user's recent
-agent decisions + semantic memory, all inside `<untrusted-data>` boundaries,
-then calls the LLM. Sessions and messages are per-user owned; context chips in
-the UI show which symbols/decisions/memory-notes were used. On LLM
-unavailability (e.g. Gemini rate-limit with no funded fallback) it returns a
-sanitized "temporarily unavailable" message.
+agent decisions + semantic memory + (Phase 5) **retrieved news headlines with
+numbered citations**, all inside `<untrusted-data>` boundaries, then calls the
+LLM (instructed to cite `[n]`). Headlines land in the `research_documents`
+corpus two ways: opportunistically on every agent run, and via the daily
+`news_ingest` scheduler job (`ENABLE_NEWS_INGEST`; retention
+`NEWS_RETENTION_DAYS`). Citations (title/url/date) persist in the message
+context and render as links. Sessions and messages are per-user owned; context
+chips in the UI show which symbols/decisions/memory-notes/news were used. On
+LLM unavailability (e.g. Gemini rate-limit with no funded fallback) it returns
+a sanitized "temporarily unavailable" message.

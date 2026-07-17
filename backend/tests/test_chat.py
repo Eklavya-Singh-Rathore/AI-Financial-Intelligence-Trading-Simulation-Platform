@@ -60,3 +60,18 @@ def test_build_user_prompt_sections_and_boundaries():
 def test_build_user_prompt_minimal():
     prompt = build_user_prompt("hello", [], [], [], [])
     assert prompt == "User question: hello"
+
+
+def test_build_user_prompt_news_block():
+    prompt = build_user_prompt(
+        "any TCS news?",
+        [],
+        [],
+        [],
+        [],
+        news_lines=["[1] [2026-07-12] TCS wins deal - detail"],
+    )
+    assert "Recent news headlines (cite as [n] when used)" in prompt
+    assert "[1] [2026-07-12] TCS wins deal" in prompt
+    # News renders inside the untrusted boundary, like memory notes.
+    assert prompt.count("<untrusted-data>") == 1
