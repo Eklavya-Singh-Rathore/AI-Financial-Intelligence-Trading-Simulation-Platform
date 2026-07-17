@@ -40,6 +40,9 @@ class AgentRun(Base):
     llm_provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
     debate_rounds: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
     final_decision: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # Decision inputs captured at gather time (Phase 5 explainability):
+    # price_summary/indicators/forecast/backtest/headlines as the agents saw them.
+    context_snapshot: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     token_usage: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

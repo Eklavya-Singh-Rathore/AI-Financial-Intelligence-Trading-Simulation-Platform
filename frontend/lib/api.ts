@@ -116,6 +116,30 @@ export type OrderCreate = {
   qty: number; limit_price?: number; stop_price?: number;
 };
 
+export type RunExplanation = {
+  run_id: string; symbol: string; status: string; as_of: string | null;
+  decision: Record<string, unknown>;
+  why: string[];
+  technical: { stance?: string; confidence?: number; report?: string };
+  news: {
+    stance?: string; sentiment_score?: number; confidence?: number;
+    report?: string; headlines: string[];
+  };
+  debate: {
+    bull: { argument?: string; key_points: string[] }[];
+    bear: { argument?: string; key_points: string[] }[];
+  };
+  risk: {
+    verdict?: string; adjusted_size_pct?: number; concerns: string[];
+    rationale?: string; limited_by: string[];
+  };
+  indicators: Record<string, number | null>;
+  price_summary: Record<string, number | null>;
+  forecast: { model?: string; horizon_days?: number; predicted_closes?: number[] };
+  backtest: { engine?: string; metrics?: Record<string, number> };
+  has_snapshot: boolean;
+};
+
 // --- Financial research (Phase 5) --------------------------------------------
 
 export type CompanyProfile = {
@@ -185,6 +209,7 @@ export const api = {
   runs: () => request<AgentRun[]>("agents/runs"),
   run: (id: string) => request<AgentRun>(`agents/runs/${id}`),
   runMessages: (id: string) => request<AgentMessage[]>(`agents/runs/${id}/messages`),
+  runExplanation: (id: string) => request<RunExplanation>(`agents/runs/${id}/explanation`),
   startRun: (symbol: string) =>
     request<AgentRun>("agents/run", { method: "POST", body: JSON.stringify({ symbol }) }),
   simPortfolio: () => request<SimPortfolio>("simulation/portfolio"),

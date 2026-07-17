@@ -204,6 +204,18 @@ async def _run_pipeline(
     seq = 0
     ctx = await gather_context(session, instrument)
 
+    # Persist the decision inputs for later explanation (Phase 5): the agents'
+    # view of the world at this moment, not whatever the data looks like later.
+    run.context_snapshot = {
+        "as_of": ctx.as_of,
+        "price_summary": ctx.price_summary,
+        "indicators": ctx.indicators,
+        "forecast": ctx.forecast,
+        "backtest": ctx.backtest,
+        "headlines": ctx.headlines[:12],
+    }
+    await session.commit()
+
     async def step(agent: Agent) -> AgentResult:
         nonlocal seq
         seq += 1
