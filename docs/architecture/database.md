@@ -10,20 +10,24 @@ and direct hosts are IPv6-only.
 
 The project **adopts** a pre-existing market-data warehouse and adds its own
 owned tables. Migrations are Alembic, applied to Supabase with
-`alembic_version` stamped in lockstep. **Head: `0010_revoke_admin_execute`.**
+`alembic_version` stamped in lockstep. **Head: `0013_run_context`.**
 
 | Group | Tables |
 |---|---|
-| Market data (adopted, read) | `instruments` (16), `price_bars` (~11,800+ real bars), `data_providers`, `instrument_provider_mappings`, `exchanges`, and the warehouse tables |
-| Project-owned | `forecasts`, `backtests`, `agent_runs` (+`idempotency_key`), `agent_messages`, `chat_sessions`, `chat_messages` |
+| Market data (adopted, read) | `instruments` (16, incl. `sector_id`/`industry_id` classification FKs), `price_bars` (~11,800+ real bars), `data_providers`, `instrument_provider_mappings`, `exchanges`, and the warehouse tables |
+| Project-owned | `forecasts`, `backtests`, `agent_runs` (+`idempotency_key`, +`context_snapshot`), `agent_messages`, `chat_sessions`, `chat_messages` |
+| Paper trading (Phase 5) | `sim_portfolios` (one per owner, unique over `COALESCE(user_id, zero-uuid)`), `sim_orders`, `sim_trades`, `sim_positions` |
+| Research (Phase 5) | `instrument_fundamentals` (yfinance JSONB cache, TTL), `research_documents` (news corpus, `content_hash` dedupe, `vector(384)`) |
 | Semantic memory | `agent_embeddings` (`vector(384)`, pgvector) |
 
 ## Migration history (Alembic)
 
 `0004_warehouse` (baseline) → `0005_forecasts_backtests` → `0006_agent_runs` →
 `0007_hardening` → `0008_chat` → `0009_user_ownership` (per-user `user_id` +
-admin-grant trigger) → **`0010_revoke_admin_execute`** (revoke RPC EXECUTE on
-the `SECURITY DEFINER` trigger function).
+admin-grant trigger) → `0010_revoke_admin_execute` (revoke RPC EXECUTE on
+the `SECURITY DEFINER` trigger function) → `0011_simulation` (paper-trading
+tables) → `0012_research` (fundamentals cache + news-RAG corpus) →
+**`0013_run_context`** (`agent_runs.context_snapshot` for explainability).
 
 Migrations run manually (`cd backend && alembic upgrade head`) from a dev
 machine or CI; never at app boot. CI's integration job applies the full chain
@@ -35,7 +39,8 @@ roles).
 ## Per-user ownership (migration 0009)
 
 `user_id UUID` (nullable, indexed) on `chat_sessions`, `agent_runs`,
-`backtests`, `forecasts`. On write the backend stamps the caller's `user_id`;
+`backtests`, `forecasts`, and (Phase 5) `sim_portfolios`/`sim_orders`/
+`sim_trades`. On write the backend stamps the caller's `user_id`;
 on read, non-privileged callers are filtered to their own rows
 (`AuthContext.owner_filter_id()`), cross-user access returns `404`, and legacy
 `NULL` rows are visible only to `admin`/`service`. Guest accounts are ordinary
@@ -50,7 +55,7 @@ flows through the backend**, which connects as the `postgres` role (RLS-exempt)
 and enforces ownership in application code. The Supabase linter reports these as
 `rls_enabled_no_policy` (INFO) — expected for this architecture, not a defect.
 
-## pgvector / semantic memory
+## pgvector / semantic memory & news RAG
 
 `agent_embeddings.embedding vector(384)` stores MiniLM
 (`all-MiniLM-L6-v2`) sentence embeddings. Recall is cosine-distance KNN in SQL
@@ -59,6 +64,12 @@ for the agent orchestrator and universe-wide for chat. Embeddings are computed
 locally (dev) or on the HF Space (`EMBEDDINGS_MODE=remote`, production) — same
 model, identical 384-d vectors. A TTL sweep purges embeddings older than
 `MEMORY_TTL_DAYS`.
+
+`research_documents` (Phase 5) uses the same 384-d vectors for the news
+corpus: headlines dedupe on `content_hash` (sha256 of title|url), embed in
+batch (rows keep `embedding=NULL` when embeddings are unavailable and are
+excluded from KNN), and are purged past `NEWS_RETENTION_DAYS`. News is a
+shared, non-user-scoped corpus (public headlines) by design.
 
 ## Fresh-DB bootstrap
 

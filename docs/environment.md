@@ -1,4 +1,4 @@
-# Environment variables — complete reference (Phase 4.5)
+# Environment variables — complete reference (Phase 5)
 
 Every variable the platform reads, grouped by concern. **Where set** uses:
 `local` = repo-root `.env` (git-ignored, from `.env.example`) ·
@@ -101,6 +101,20 @@ option only).
 | `AGENT_RUN_STALE_MINUTES` | `30` | no | rarely | startup orphan sweep threshold |
 | `MEMORY_TTL_DAYS` | `90` | no | rarely | embedding retention |
 
+## Paper trading / research / evaluation (Phase 5)
+
+All have safe defaults — no deploy-time action was required for Phase 5.
+
+| Variable | Default | Secret | Where set | Purpose |
+|---|---|---|---|---|
+| `SIM_STARTING_CASH` | `1000000` | no | rarely | paper-portfolio starting cash (INR) for newly created portfolios |
+| `FUNDAMENTALS_TTL_HOURS` | `24` | no | rarely | yfinance fundamentals cache TTL (`instrument_fundamentals`) |
+| `ENABLE_NEWS_INGEST` | `true` | no | Render | daily scheduler job persisting headlines into the news-RAG corpus |
+| `NEWS_RAG_TOP_K` | `5` | no | rarely | news headlines retrieved per chat message (citations) |
+| `NEWS_RETENTION_DAYS` | `180` | no | rarely | news documents older than this are purged by the ingest job |
+| `LLM_COST_INPUT_PER_1M` | `0.30` | no | rarely | USD per 1M input tokens — cost estimation in `/evaluation/summary` only |
+| `LLM_COST_OUTPUT_PER_1M` | `2.50` | no | rarely | USD per 1M output tokens — 〃 |
+
 ## Frontend (Vercel project)
 
 | Variable | Default | Secret | Where set | Purpose |
@@ -120,4 +134,4 @@ option only).
 | Variable | Status |
 |---|---|
 | `ANTHROPIC_API_KEY` | declared in settings, **not yet wired** — the LLM registry currently builds only gemini/openai/fake; reserved for a future Claude provider |
-| Twitter/X & other data APIs | Phase 5 roadmap; will follow the same pattern (key in Render env, graceful degrade when absent). The old `ALPHA_VANTAGE_KEY` doc reference was dead — no code reads it — and has been dropped |
+| Twitter/X & other data APIs | future roadmap; will follow the same pattern (key in Render env, graceful degrade when absent). The old `ALPHA_VANTAGE_KEY` doc reference was dead — no code reads it — and has been dropped |

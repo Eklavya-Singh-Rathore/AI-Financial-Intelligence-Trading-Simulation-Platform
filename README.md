@@ -7,17 +7,26 @@ market data, computes technical indicators, forecasts prices with the
 strategies on [NautilusTrader](https://nautilustrader.io). **No real trading** —
 simulation and analytics only.
 
-## Status: Phase 4.5 — production deployment (Render + Hugging Face Space)
+## Status: Phase 5 — intelligence, research & paper trading
 
-Production architecture: **Vercel** (frontend) → **Render free tier** (slim
-FastAPI backend, no torch) → **Hugging Face Space** (`ai-inference-service`:
-official Kronos + MiniLM behind `POST /forecast` / `POST /embed`) →
-**Supabase** (Postgres + Auth). `KRONOS_MODE` / `EMBEDDINGS_MODE` switch
-between in-process models (`local`, the dev default) and the Space (`remote`,
-production) — same models, same API surface, same persisted `model_name`.
-Earlier phases: Supabase Auth + RBAC + per-user isolation (4), Next.js
-dashboard/chat (3), agents + RAG (2), audit hardening (2.5 — see
-`AUDIT_REPORT.md`), core platform (1).
+Phase 5 adds a **paper-trading simulator** (human-in-the-loop AI proposals —
+the AI never auto-executes), **financial research** (company profiles,
+statements, derived earnings analysis), a **news-RAG corpus with chat
+citations**, **explainable recommendations** (decision inputs snapshotted per
+run), **portfolio intelligence** (risk score, sector exposure, correlation,
+rebalancing suggestions), and **AI evaluation** (forecast accuracy, agent
+agreement, recommendation success, cost/latency).
+
+Production architecture (Phase 4.5): **Vercel** (frontend) → **Render free
+tier** (slim FastAPI backend, no torch) → **Hugging Face Space**
+(`ai-inference-service`: official Kronos + MiniLM behind `POST /forecast` /
+`POST /embed`) → **Supabase** (Postgres + Auth). `KRONOS_MODE` /
+`EMBEDDINGS_MODE` switch between in-process models (`local`, the dev default)
+and the Space (`remote`, production) — same models, same API surface, same
+persisted `model_name`. Earlier phases: Supabase Auth + RBAC + per-user
+isolation (4), Next.js dashboard/chat (3), agents + RAG (2), audit hardening
+(2.5 — see `AUDIT_REPORT.md`), core platform (1). Full reference:
+[docs/MASTER_ARCHITECTURE.md](docs/MASTER_ARCHITECTURE.md).
 
 | Capability | State |
 |---|---|
@@ -33,8 +42,15 @@ dashboard/chat (3), agents + RAG (2), audit hardening (2.5 — see
 | Multi-agent pipeline (analysts → debate → trader → risk → PM) | ✅ |
 | Semantic memory (MiniLM 384 + pgvector `agent_embeddings`) | ✅ |
 | Web dashboard (Next.js 15): universe table, candle charts + forecast overlay, backtest UI | ✅ live-verified |
-| Agent-run UI (live-polling transcript + decision card) | ✅ |
-| Chat UI (persisted sessions, grounded answers, context chips) | ✅ live-verified |
+| Agent-run UI (live-polling transcript + decision card + explanation panel) | ✅ |
+| Chat UI (persisted sessions, grounded answers, context chips, news citations) | ✅ live-verified |
+| Paper trading (portfolio, market/limit/stop orders, performance metrics, equity/drawdown charts) | ✅ Phase 5 |
+| AI → Simulation proposals (Send to Simulation, human accept/reject — never auto-executed) | ✅ Phase 5 |
+| Financial research (profile, income/balance/cashflow statements, QoQ/YoY earnings) | ✅ Phase 5 |
+| News RAG (persisted + embedded headlines, chat citations, daily ingest job) | ✅ Phase 5 |
+| Explainability (`/explanation`: decision inputs snapshotted at gather time) | ✅ Phase 5 |
+| Portfolio intelligence (risk score, sector exposure, HHI, correlation, suggestions) | ✅ Phase 5 |
+| AI evaluation (`/evaluation/summary`: forecast MAPE, agent agreement, success rate, cost) | ✅ Phase 5 |
 
 ### Agents API
 
@@ -135,7 +151,11 @@ uvicorn app.main:app --reload                     # Swagger at http://localhost:
 | `GET /instruments/{symbol}/prices` | stored OHLCV |
 | `GET /instruments/{symbol}/indicators?names=sma,rsi` | computed indicators |
 | `GET /instruments/{symbol}/forecast?horizon=5&model=kronos` | price forecast |
+| `GET /instruments/{symbol}/profile` `/financials` `/earnings` | company research (yfinance, TTL-cached) |
 | `POST /backtest` | run SMA-crossover backtest (nautilus or simple engine) |
+| `GET/POST /simulation/*` | paper trading: portfolio, orders, trades, performance, intelligence, proposals |
+| `GET /agents/runs/{id}/explanation` | deterministic recommendation explanation |
+| `GET /evaluation/summary` | AI quality & cost metrics |
 
 Symbols are the internal registry symbols (e.g. `RELIANCE`, `NIFTY50`, `GOLD`) —
 provider tickers like `RELIANCE.NS` are resolved via `instrument_provider_mappings`.
@@ -229,6 +249,9 @@ prior repository, so a fresh local DB needs a one-time schema load, e.g.
 
 ## Documents
 
+- `docs/MASTER_ARCHITECTURE.md` — the complete system reference (start here)
+- `docs/architecture/` — per-area deep dives (system, backend, frontend, database, agents, security, deployment)
+- `docs/adr/` — architecture decision records (ADR-0001 … ADR-0006)
 - `docs/deploy-render.md` — backend deployment runbook (Render)
 - `docs/deploy-hf-space.md` — inference Space runbook (Hugging Face)
 - `docs/environment.md` — every environment variable, grouped, with where-to-set

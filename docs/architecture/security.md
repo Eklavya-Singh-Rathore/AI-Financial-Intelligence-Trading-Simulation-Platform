@@ -19,7 +19,8 @@ context — loudly warned at startup.
 
 ## Per-user isolation
 
-`user_id` on `chat_sessions`, `agent_runs`, `backtests`, `forecasts`. The
+`user_id` on `chat_sessions`, `agent_runs`, `backtests`, `forecasts`, and
+(Phase 5) `sim_portfolios`/`sim_orders`/`sim_trades`. The
 backend stamps the caller's id on write and filters by owner on read;
 cross-user access returns `404`. Verified live with distinct users (and with the
 guest account, which is an ordinary `user`).

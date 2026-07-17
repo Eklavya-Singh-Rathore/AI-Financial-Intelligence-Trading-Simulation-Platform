@@ -17,14 +17,14 @@ is a config change.
 |---|---|
 | `app/main.py` | App factory, lifespan (logging, orphan-run sweep, scheduler), CORS, router mounting at `/` and `/api/v1`, `/metrics` |
 | `app/core/` | `config.py` (pydantic-settings), `auth.py` (JWT/API-key → `AuthContext`), logging, domain constants |
-| `app/api/routers/` | `health`, `instruments` (prices/indicators/forecast), `ingest`, `backtest`, `agents`, `chat` |
-| `app/services/` | `market_data`, `data_ingest`, `indicators`, `forecast_service`, `backtest_service`, `news`, `embeddings`, `space_client`, `chat_service` |
+| `app/api/routers/` | `health`, `instruments` (prices/indicators/forecast/profile/financials/earnings), `ingest`, `backtest`, `agents` (+explanation), `chat`, `simulation`, `evaluation` |
+| `app/services/` | `market_data`, `data_ingest`, `indicators`, `forecast_service`, `backtest_service`, `news`, `embeddings`, `space_client`, `chat_service`, `simulation` (paper-trading engine), `research` (fundamentals), `news_rag` (news corpus + retrieval), `evaluation` (AI quality/cost) |
 | `app/ml/` | `Forecaster` interface + `registry`; `baseline`, `kronos` (local), `remote_kronos` (Space); vendored `kronos_src/` (MIT) |
 | `app/backtesting/` | `Backtester` interface + registry; NautilusTrader + a simple vectorized engine; SMA-crossover strategy |
 | `app/llm/` | `LLMClient` + failover registry; Gemini / OpenAI / fake clients |
-| `app/agents/` | 7-agent orchestrator, prompts, risk limits (see [ai-agents.md](ai-agents.md)) |
+| `app/agents/` | 7-agent orchestrator, prompts, risk limits, `explain.py` (deterministic explanation composition) — see [ai-agents.md](ai-agents.md) |
 | `app/models/`, `app/db/` | Async SQLAlchemy ORM + engine/session |
-| `app/scheduler/` | APScheduler jobs (daily ingest; inference-Space keep-warm) |
+| `app/scheduler/` | APScheduler jobs (daily ingest; sim order sweep; news ingest; inference-Space keep-warm) — single-flight via Postgres advisory locks |
 
 ## Registries (the extension seam)
 
@@ -79,8 +79,11 @@ inference client (`app/services/space_client.py`) follows the same pattern.
 | `GET /instruments`, `/instruments/summary` | the 16-asset universe |
 | `GET /instruments/{s}/prices` `/indicators` `/forecast` | forecast: `horizon` (1–60), `model` (`kronos`/`baseline`), `persist` |
 | `POST /backtest` | SMA-crossover, `nautilus`/`simple` engine |
-| `POST /agents/run` → `202` | fire-and-poll; `GET /agents/runs/{id}` + `/messages` |
-| `POST /chat/sessions`, `POST /chat/sessions/{id}/messages` | RAG-grounded chat |
+| `POST /agents/run` → `202` | fire-and-poll; `GET /agents/runs/{id}` + `/messages` + `/explanation` |
+| `POST /chat/sessions`, `POST /chat/sessions/{id}/messages` | RAG-grounded chat with news citations |
+| `GET /instruments/{s}/profile` `/financials` `/earnings` | yfinance fundamentals, TTL-cached, degrade-to-DB |
+| `GET/POST /simulation/*` | portfolio, orders (market/limit/stop), trades, performance, intelligence, AI proposals (accept/reject) |
+| `GET /evaluation/summary` | forecast accuracy, agent stats, recommendation success, usage & cost |
 
 Every business route depends on `get_auth`; routes are dual-mounted at `/` and
 `/api/v1`. Validation is Pydantic (out-of-range → `422`, unknown symbol → `404`,
