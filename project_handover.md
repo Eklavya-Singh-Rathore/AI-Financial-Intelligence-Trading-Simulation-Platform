@@ -1,8 +1,9 @@
 # project_handover.md
 
 > **Single source of truth for resuming development** — self-contained; no prior
-> conversations needed. Last updated: **2026-07-11, Phase 4.6**
-> (end-to-end verification, guest login, architecture docs, production-ready).
+> conversations needed. Last updated: **2026-07-17, Phase 5 SHIPPED**
+> (paper trading, research, news RAG, explainability, evaluation — merged to
+> `main`, CI green, deployed, production-verified).
 
 ## 1. What this is
 
@@ -11,110 +12,116 @@ decision-support (NO real trading) for a fixed 16-asset Indian-market universe
 (NIFTY 50, Sensex, gold/silver ETFs, 12 NSE blue-chips). Ingests daily OHLCV,
 computes indicators, forecasts with the vendored **Kronos** foundation model,
 backtests on **NautilusTrader**, runs a 7-agent LLM pipeline (Gemini) producing
-risk-limited recommendations, and serves a Next.js dashboard + grounded chat.
+risk-limited recommendations, **explains** those recommendations, lets users
+**paper-trade** them (human-in-the-loop — AI never auto-executes), serves
+company **research** (profiles/statements/earnings), grounds chat in market
+data + a persisted **news corpus with citations**, and **evaluates** its own
+AI quality (`/insights`).
 
 - Repo: https://github.com/Eklavya-Singh-Rathore/AI-Financial-Intelligence-Trading-Simulation-Platform
+  — `main` at **`bb99901`** (Phase 5 merge), everything pushed, no open PRs.
 - DB/Auth: Supabase **`ai-stock-prediction`** (`rekoawsoghrjcimknkfz`, ap-south-1, PG 17)
-- **Live** (see §7): Vercel frontend · Render backend · HF inference Space · Supabase
-- Docs: `README.md`, `docs/architecture/` (7 docs), `docs/adr/` (ADR-0001..0005),
-  `docs/deploy-render.md`, `docs/deploy-hf-space.md`, `docs/environment.md`,
-  `AUDIT_REPORT.md` (historical)
+- **Live** (§7): Vercel frontend · Render backend · HF inference Space · Supabase —
+  all serving the Phase 5 code.
+- Docs: **`docs/MASTER_ARCHITECTURE.md`** (start here), `docs/architecture/`
+  (7 docs), `docs/adr/` (ADR-0001..0006), `docs/deploy-render.md`,
+  `docs/deploy-hf-space.md`, `docs/environment.md`, `README.md`.
 - **Notifications are permanently out of scope** (owner decision, Phase 4).
+- The Phase 5 work branch `claude/phase-4-5-deployment-migration-ea8b0e` (in a
+  worktree under `.claude/worktrees/`) is fully merged into `main` and can be
+  deleted along with its worktree.
 
-## 2. Phase history (commits on `main`)
+## 2. Phase history (all merged on `main`)
 
 | Phase | Delivered |
 |---|---|
 | 1 | FastAPI core, yfinance→`price_bars` ingestion, indicators, Forecaster/Backtester registries, APScheduler, CI, Docker |
 | 2 | LLM layer (Gemini/OpenAI/fake), 7-agent pipeline w/ coded risk limits, NewsAPI, MiniLM semantic memory, agents API |
-| 2.5 | Full audit remediation: API-key auth, rate limiting, run caps + timeouts + orphan sweep, CPU off event loop, failover normalization, pooler-safe asyncpg, requirements.lock, hardened non-root Docker, Prometheus + request IDs, prompt trust boundaries, DB-integration suite |
+| 2.5 | Full audit remediation (auth, rate limits, run caps, pooler-safe asyncpg, hardened Docker, Prometheus, prompt trust boundaries, DB-integration suite) |
 | Kronos | Vendored `app/ml/kronos_src/` (MIT); `model=kronos` verified live |
-| 3 | First live verification (11,844 bars, live Kronos + Nautilus + agent run) + 5 bug fixes; `/instruments/summary`; persisted chat + RAG; **Next.js frontend** (dashboard/candles+forecast/backtest/agents/chat), auth proxy, both themes |
-| 4 | **Supabase Auth + JWT + RBAC + per-user isolation** (migration 0009), open sign-up, login UI + session middleware, Vercel frontend deploy |
-| 4.5 | **Deployment migration**: `RemoteKronosForecaster` + remote MiniLM via a private HF Space, reusable `space_client`, `KRONOS_MODE`/`EMBEDDINGS_MODE` toggles, slim torch-free Render image, `render.yaml`, keepalive workflow, proxy `maxDuration=300`; **backend + Space + frontend deployed and production-verified** |
-| 4.6 | this phase — **stabilization**: full E2E verification, **Guest Login** (server-side session, dedicated guest account, no bypass), 1 bug fix + regression test, DB hardening (migration 0010), **architecture docs (7) + ADRs (5)**, handover rewrite |
+| 3 | Live verification + 5 bug fixes; `/instruments/summary`; persisted chat + RAG; **Next.js frontend**, auth proxy, both themes |
+| 4 | **Supabase Auth + JWT + RBAC + per-user isolation** (migration 0009), open sign-up, login UI + session middleware, Vercel deploy |
+| 4.5 | **Deployment migration**: remote Kronos/MiniLM via private HF Space, `space_client`, mode toggles, slim torch-free Render image, keepalive; production-verified |
+| 4.6 | **Stabilization**: full E2E verification, **Guest Login**, 2 bug fixes, DB hardening (migration 0010), architecture docs (7) + ADRs (5) |
+| 5 | **Intelligence, research & paper trading** (2026-07-17): paper-trading engine + `/simulation` (API+UI), financial research (profiles/statements/earnings), news RAG + chat citations, explainability (+`context_snapshot`), portfolio intelligence, AI evaluation + `/insights`, `docs/MASTER_ARCHITECTURE.md` + ADR-0006, migrations 0011–0013 |
 
 ## 3. Architecture
 
 `api/routers → services → (ml | backtesting | llm | agents) → models/db`
 (async SQLAlchemy → Supabase). Registries select implementations; heavy work
-runs off the event loop. **Inference modes**: `KRONOS_MODE`/`EMBEDDINGS_MODE` =
-`local` (in-process torch, dev) or `remote` (HF Space, production) — same public
-forecaster name `kronos`, same persisted `model_name`. Frontend (Next.js 15)
-reaches the backend only via the authenticated same-origin proxy
-`app/api/backend/[...path]` (forwards the Supabase Bearer JWT; `maxDuration=300`).
-**Full detail: `docs/architecture/` + `docs/adr/`.**
+runs off the event loop. Inference modes: `KRONOS_MODE`/`EMBEDDINGS_MODE` =
+`local` (dev) or `remote` (HF Space, production). Frontend (Next.js 15) reaches
+the backend only via the authenticated same-origin proxy
+`app/api/backend/[...path]`. Phase 5 services: `simulation` (paper-trading
+engine), `research` (yfinance fundamentals, TTL cache), `news_rag` (embedded
+news corpus + KNN), `evaluation` (AI quality/cost). **Complete reference:
+`docs/MASTER_ARCHITECTURE.md`.**
+
+Key Phase 5 design points (ADR-0006): daily-bar order semantics (market at
+latest close; limit/stop rest and trigger on new bars, gap-aware), avg-cost
+accounting, equity curve reconstructed on demand (no snapshot table), one
+portfolio per owner, and **AI proposals are structural human-in-the-loop**
+(`proposed` → human accept/reject; HOLD/veto/zero-size not proposable).
 
 ## 4. Auth model
 
-- **Users:** Supabase Auth, email+password, open sign-up; cookie sessions
-  (@supabase/ssr); `middleware.ts` guards all routes except `api/backend` +
-  `api/guest`.
-- **Guest (4.6):** "Continue as Guest" → server-side `/api/guest` signs in a
-  dedicated pre-provisioned guest account (`guest@finintel.app`) with server-only
-  `GUEST_EMAIL`/`GUEST_PASSWORD`; normal `user` role, full ownership isolation,
-  no bypass, no client-exposed secret.
+- **Users:** Supabase Auth, email+password, open sign-up; cookie sessions;
+  `middleware.ts` guards all routes except `api/backend` + `api/guest`.
+- **Guest:** "Continue as Guest" → server-side `/api/guest` signs in a dedicated
+  account (`guest@finintel.app`), normal `user` role, no bypass.
 - **Backend** (`app/core/auth.py`): `X-API-Key` → `service`; `Bearer <jwt>`
-  verified locally (HS256 `SUPABASE_JWT_SECRET`) or remotely (`/auth/v1/user`, 60s cache).
-- **Roles:** `service` > `admin` (owner emails via trigger) > `user`.
-- **Isolation:** `user_id` on chat_sessions/agent_runs/backtests/forecasts;
-  cross-user → 404. **Live-verified** incl. the guest account.
+  verified locally (HS256) or remotely (60s cache). Roles: `service` > `admin` > `user`.
+- **Isolation:** `user_id` on chat_sessions/agent_runs/backtests/forecasts/
+  sim_portfolios/sim_orders/sim_trades; cross-user → 404. News documents are a
+  shared corpus (public headlines) by design.
 
 ## 5. Database
 
-Alembic head **`0010_revoke_admin_execute`** (applied to Supabase; stamped in
-lockstep). Owned: `forecasts`, `backtests`, `agent_runs`(+idempotency_key),
-`agent_messages`, `chat_sessions`, `chat_messages`. Adopted: `instruments` (16),
-`price_bars` (11,844+ real bars), `data_providers`, `instrument_provider_mappings`,
-`exchanges`, warehouse tables, `agent_embeddings` (pgvector 384). **RLS
-deny-by-default** on all public tables (intended — data flows through the
-backend as `postgres`; Supabase REST API locked). Migrations manual
-(`alembic upgrade head`). Fresh DB: `scripts/base_schema.sql`. Details:
-`docs/architecture/database.md`.
+Alembic head on Supabase: **`0013_run_context`** (applied; `alembic current`
+verified). Owned: `forecasts`, `backtests`, `agent_runs`
+(+`context_snapshot`), `agent_messages`, `chat_sessions`, `chat_messages`,
+`sim_portfolios`, `sim_orders`, `sim_trades`, `sim_positions`,
+`instrument_fundamentals`, `research_documents`. Adopted: `instruments` (16,
+incl. `sector_id`/`industry_id` mapped on the ORM), `price_bars`,
+`data_providers`, `instrument_provider_mappings`, `exchanges`, warehouse
+tables, `agent_embeddings`. **RLS deny-by-default everywhere** (backend
+connects as `postgres`, ownership in app code). Migrations manual
+(`alembic upgrade head`); CI proves the chain on vanilla Postgres.
+`scripts/base_schema.sql` is **stale** (predates 0011–0013) — regenerate it if
+a fresh-DB bootstrap is ever needed.
 
-## 6. Verification status (Phase 4.6)
+## 6. Verification status (Phase 5 ship, 2026-07-17)
 
-**All implemented features verified end-to-end. No open bugs.**
+- **Backend gates:** 185 fast tests passed, ruff/mypy/bandit clean.
+- **DB integration:** 18/18 db-marked tests green against live Supabase
+  (order lifecycle, ownership isolation, proposal accept flow, limit
+  rest→fill, news ingest/dedupe/KNN).
+- **Frontend:** `tsc --noEmit`, `next build` (routes `/simulation`,
+  `/insights` present), `npm test` 3/3.
+- **CI:** green on merge commit `bb99901`.
+- **Local full-stack smoke (before merge):** portfolio auto-create → market
+  buy filled at close → performance/intelligence correct; research
+  profile/financials/earnings live from yfinance then `cache` on second call;
+  evaluation computed real historical numbers (5 matured Kronos points,
+  MAPE 1.56%).
+- **Production verification (after deploy, via the real guest→proxy path):**
+  `/health` = production + remote modes; guest portfolio auto-created
+  (₹10,00,000); limit order placed → rested `open` → cancelled; intelligence +
+  performance correct; RELIANCE profile/earnings live; evaluation
+  owner-scoped. Browser-verified: `/simulation`, `/insights`, and the
+  instrument Research section all render with live data, **zero console
+  errors** (screenshot taken in-session).
+- **Bug found & fixed during ship:** equity curve valued holdings at 0 for
+  calendar days after the last ingested bar (day-one portfolios, weekends) —
+  `reindex(calendar)` dropped close history before `ffill`. Fixed by ffilling
+  over the union of history + calendar; 2 regression tests added; verified
+  live (equity 1,000,000 not 987,034). Commit `0821946`.
+- Not live-exercised in production (mechanism verified by tests instead):
+  chat news-citations end-to-end (corpus fills as agent runs / the daily
+  `news_ingest` job execute) and the AI proposal accept flow (needs a
+  completed BUY/SELL run; covered by db-integration test).
 
-- **Auth:** sign-in/guest/logout, JWT (local+remote), session persistence,
-  protected routes, admin/user/guest roles, multi-user isolation — ✅.
-- **APIs:** auth matrix (anon 401 / X-API-Key 200 / JWT 200), validation
-  (horizon>60→422, horizon<1→422, unknown symbol→404, unknown forecaster→422,
-  bad body→422), rate limiting configured, error responses sanitized — ✅.
-- **Forecasting:** baseline + remote Kronos (HF Space) return 200 with finite
-  predictions; UI overlay renders; `ForecasterError`→503 / baseline fallback — ✅.
-- **Backtesting:** NautilusTrader 200; metric tiles render (Total return, Sharpe,
-  Max drawdown, Win rate, Volatility, Fills); persistence — ✅.
-- **Agents:** full 7-agent run completes (7 messages), coded risk limits, JSON
-  outputs, remote-embedding memory writes, decision persistence — ✅.
-- **Chat/RAG:** sessions create/list/delete, ownership isolation, grounded
-  responses (verified when Gemini has quota), graceful degradation when the LLM
-  is rate-limited — ✅.
-- **DB:** migrations at head, CRUD, ownership, RLS deny-by-default, pgvector
-  search — ✅. Security advisors: `grant_admin_role` RPC EXECUTE revoked
-  (migration 0010; warnings cleared).
-- **Frontend:** every page renders; charts; light/dark theme; responsive (no
-  horizontal overflow at mobile); loading/error states; no console errors — ✅.
-- **Bugs found + fixed (2):** (1) middleware guarded `/api/guest` and
-  redirected the guest sign-in to `/login` (broke guest login) → excluded it +
-  regression test. (2) **`NEXT_PUBLIC_SUPABASE_URL` in Vercel had a leading BOM/
-  invisible character**, producing a malformed Supabase URL that broke ALL
-  server-side auth in production (guest sign-in 401, and the
-  prod-frontend→prod-backend JWT flow) → re-set clean `NEXT_PUBLIC_SUPABASE_*`
-  via the Vercel API + fresh rebuild. **Guest login now production-verified**:
-  "Continue as Guest" → authenticated dashboard → guest JWT accepted by the
-  Render backend (health + instruments/summary 200).
-
-### Testing
-
-- Backend: `pytest -m "not slow and not db"` = **136 passed** (ruff/mypy/bandit
-  clean); integration db-marked suite via pgvector Postgres.
-- Frontend: `tsc` + `npm test` (3 `node:test` middleware-matcher regression
-  tests) + `next build` — all green.
-- CI (`.github/workflows/ci.yml`): backend / integration / frontend (adds
-  `npm test`) / docker (full + slim torch-free) + kronos_src drift check.
-
-## 7. Deployment (live)
+## 7. Deployment (live, Phase 5 code)
 
 ```
 Users → Vercel frontend → Render backend (slim, no torch) → Supabase
@@ -122,47 +129,48 @@ Users → Vercel frontend → Render backend (slim, no torch) → Supabase
                                  └→ Gemini/OpenAI · NewsAPI · yfinance
 ```
 
-- **Frontend → Vercel** project `ai-financial-intelligence-platform` (team
-  `eklavya-singh-rathores-projects`). **LIVE:**
-  `https://ai-financial-intelligence-platf-eklavya-singh-rathores-projects.vercel.app`.
-  Env: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
-  `BACKEND_URL`, `GUEST_EMAIL`, `GUEST_PASSWORD` (`BACKEND_API_KEY` empty).
-  Root Directory = `frontend`; Vercel Authentication disabled (app has its own auth).
-- **Backend → Render** free web service `srv-d995r0faqgkc73fpjfsg`. **LIVE:**
-  `https://stock-ai-backend-gv17.onrender.com` (Docker `backend/Dockerfile.render`,
-  Singapore, `KRONOS_MODE`/`EMBEDDINGS_MODE=remote`). DATABASE_URL uses the
-  Supabase **aws-1-ap-south-1 pooler** (IPv4). Runbook: `docs/deploy-render.md`.
+- **Frontend → Vercel** `ai-financial-intelligence-platform`. **LIVE:**
+  `https://ai-financial-intelligence-platf-eklavya-singh-rathores-projects.vercel.app`
+  (auto-deployed from the `main` push).
+- **Backend → Render** `srv-d995r0faqgkc73fpjfsg`. **LIVE:**
+  `https://stock-ai-backend-gv17.onrender.com` — deploy `dep-d9cvkp58nd3s73canleg`
+  of commit `bb99901`. **Note:** the Render service does NOT auto-deploy on
+  push in practice (webhook never fired for this merge; also observed in 4.5) —
+  trigger via API: `POST /v1/services/srv-…/deploys {"commitId": …}`.
 - **Inference → HF Space** `Eklavya73/ai-inference-service` (private, Gradio
-  SDK on ZeroGPU, CPU-only, no GPU quota). **LIVE:**
-  `https://eklavya73-ai-inference-service.hf.space` (`/forecast` `/embed`
-  `/health` + Gradio status page). Runbook: `docs/deploy-hf-space.md`.
-- **Keep-alive:** GitHub Actions `keepalive.yml` (var `BACKEND_LIVE_URL`) pings
-  Render `/live` every 10 min (verified green); backend scheduler pings the Space
-  every 6 h.
-- **Env reference:** `docs/environment.md`. Local dev unchanged (inference
-  defaults to `local`). Expected delta vs localhost: first-request-after-idle
-  latency only.
+  SDK on ZeroGPU, CPU-only). **LIVE:**
+  `https://eklavya73-ai-inference-service.hf.space` — unchanged by Phase 5.
+- **Keep-alive:** GitHub Actions pings Render `/live` every 10 min; backend
+  scheduler pings the Space every 6 h. New Phase 5 jobs: sim order sweep
+  (ingest+15min), news ingest (ingest+30min, `ENABLE_NEWS_INGEST`).
+- **Env:** no new required vars — all Phase 5 settings have safe defaults
+  (see `docs/environment.md` §Phase 5).
 
 ## 8. Remaining owner actions
 
 1. **Rotate credentials shared during development:** Supabase DB password →
    new pooler `DATABASE_URL`; `GOOGLE_AI_STUDIO_API_KEY`, `OPENAI_API_KEY`,
    `NEWSAPI_KEY`; regenerate `API_KEY`; the **Render API key** and **HF write
-   token** used this phase (replace HF with a fine-grained **read** token on the
-   Space, set as `HF_TOKEN` in Render). Anon key is public by design.
-2. Create least-privilege DB role `app_rw` (DML on app tables only) to replace
-   the `postgres` app connection — SQL in `docs/deploy-render.md`.
-3. Enable Supabase **leaked-password protection** (dashboard → Auth) and
-   consider requiring email confirmation (currently open sign-up).
+   token** (replace HF with a fine-grained **read** token on the Space).
+   The Render API key was used again this phase (deploy trigger + status).
+2. Create least-privilege DB role `app_rw` to replace the `postgres` app
+   connection — SQL in `docs/deploy-render.md`.
+3. Enable Supabase **leaked-password protection**; consider requiring email
+   confirmation (currently open sign-up).
 4. Optional: fund the OpenAI key or clear `LLM_FALLBACK_PROVIDER`; paste
-   `SUPABASE_JWT_SECRET` into Render for faster JWT verification.
-5. Optional: rotate the guest account password (regenerate + update Supabase +
-   `GUEST_PASSWORD` in Vercel).
+   `SUPABASE_JWT_SECRET` into Render; rotate the guest password.
+5. Housekeeping: delete the merged branch
+   `claude/phase-4-5-deployment-migration-ea8b0e` + its worktree; regenerate
+   `scripts/base_schema.sql` if a fresh-DB bootstrap is wanted.
 
-## 9. Phase 5 roadmap (next)
+## 9. Future / beyond Phase 5
 
 Durable job queue replacing `BackgroundTasks` (durable + scheduled autonomous
-runs) · per-user LLM quotas · prompt registry/versioning · agent-quality
-evaluation harness · additional data APIs (Twitter/X — the production Vercel URL
-is the OAuth callback base) · multi-tenant RLS policies if SaaS is pursued.
-*(Notifications: permanently removed.)*
+runs) · per-user LLM quotas · prompt registry/versioning · RAG document
+uploads (filings/transcripts — `research_documents.doc_type` is ready for it)
+· forecast persistence from the UI (frontend currently calls
+`persist=false`, so `/insights` forecast accuracy only accrues from
+API/backfill usage) · agent-quality evaluation harness beyond
+`/evaluation/summary` · additional data APIs (Twitter/X — the production
+Vercel URL is the OAuth callback base) · multi-tenant RLS policies if SaaS is
+pursued. *(Notifications: permanently removed.)*
