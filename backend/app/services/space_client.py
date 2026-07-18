@@ -69,6 +69,11 @@ class SpaceClient:
         self.max_retries = max(0, int(max_retries))
         self.backoff_base = backoff_base
         self.wake_max_wait = wake_max_wait
+        # Last successful /health payload, cached so the backend /health can
+        # report the remote model ids without issuing its own Space request
+        # (the 6-hourly keepalive job refreshes this).
+        self.last_health: dict[str, Any] | None = None
+        self.last_health_at: float | None = None
         headers: dict[str, str] = {}
         if hf_token:
             headers["Authorization"] = f"Bearer {hf_token}"
@@ -96,8 +101,11 @@ class SpaceClient:
         )
 
     def health(self) -> dict[str, Any]:
-        """GET /health (also used as the keep-warm ping)."""
-        return self._request("GET", "/health", op="health", retry_read_timeout=True)
+        """GET /health (also used as the keep-warm ping); caches the payload."""
+        data = self._request("GET", "/health", op="health", retry_read_timeout=True)
+        self.last_health = data
+        self.last_health_at = time.time()
+        return data
 
     # -- internals ----------------------------------------------------------
 

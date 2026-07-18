@@ -44,9 +44,45 @@ def test_health_without_database(client, monkeypatch):
         body = r.json()
         assert body["status"] == "ok"
         assert body["database"] == "not_configured"
+        # Phase 6 Kronos audit: /health surfaces the configured checkpoint ids.
+        assert body["kronos_model_id"] == "NeoQuasar/Kronos-small"
+        assert body["kronos_tokenizer_id"] == "NeoQuasar/Kronos-Tokenizer-base"
+        assert body["default_forecaster"] == "kronos"
+        assert body["kronos_max_context"] == 512
+        # local mode (test default) → no remote_inference block
+        assert "remote_inference" not in body
     finally:
         monkeypatch.delenv("DATABASE_URL", raising=False)
         get_settings.cache_clear()
+
+
+def test_health_remote_reports_cached_space_health(client, monkeypatch):
+    from app.core.config import get_settings
+    from app.services import space_client
+
+    monkeypatch.setenv("DATABASE_URL", "")
+    monkeypatch.setenv("KRONOS_MODE", "remote")
+    monkeypatch.setenv("INFERENCE_SPACE_URL", "https://example.test")
+    get_settings.cache_clear()
+    space_client.reset_space_client()
+    # Simulate the keepalive job having cached a Space /health payload.
+    space_client.get_space_client().last_health = {
+        "kronos_model_id": "NeoQuasar/Kronos-small",
+        "kronos_tokenizer_id": "NeoQuasar/Kronos-Tokenizer-base",
+        "embedding_model_id": "all-MiniLM-L6-v2",
+        "device": "cpu",
+        "app_version": "0.2.3",
+    }
+    try:
+        body = client.get("/health").json()
+        assert body["kronos_mode"] == "remote"
+        assert body["remote_inference"]["kronos_model_id"] == "NeoQuasar/Kronos-small"
+        assert body["remote_inference"]["device"] == "cpu"
+    finally:
+        for key in ("DATABASE_URL", "KRONOS_MODE", "INFERENCE_SPACE_URL"):
+            monkeypatch.delenv(key, raising=False)
+        get_settings.cache_clear()
+        space_client.reset_space_client()
 
 
 def test_openapi_lists_all_endpoints(client):

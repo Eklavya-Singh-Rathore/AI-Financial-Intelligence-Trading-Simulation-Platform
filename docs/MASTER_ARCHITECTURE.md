@@ -77,7 +77,41 @@ registry maps `kronos` to in-process torch (`KRONOS_MODE=local`, dev) or the
 HF Space (`remote`, production) — same public name, same persisted
 `model_name`. Failures normalize to `ForecasterError` → HTTP 503; agent runs
 fall back to `baseline`. Forecasts persist per point (`forecasts` table) with
-owner stamping.
+owner stamping. Kronos is the default forecaster (`DEFAULT_FORECASTER=kronos`)
+and, as of Phase 6, is shown by default on the instrument chart.
+
+#### Kronos model audit (Phase 6)
+
+The platform uses the **official Kronos** foundation model (github.com/shiyu-coder/Kronos,
+MIT), vendored at `backend/app/ml/kronos_src/` for local inference and mirrored
+byte-identically at `infrastructure/hf-space/kronos_src/` for the Space (a CI
+`diff -r` drift check enforces this). The vendored `Kronos`/`KronosTokenizer`
+are generic `PyTorchModelHubMixin` classes — every hyperparameter (d_model,
+layers, heads, context) comes from the loaded Hub checkpoint's config, so the
+**deployed variant is entirely determined by the configured model id**, not by
+code.
+
+| Variant | Params | Context | Deployed? |
+|---|---|---|---|
+| Kronos-mini | ~4.1M | 2048 | no |
+| **Kronos-small** | **~24.7M** | **512** | **yes (local + remote)** |
+| Kronos-base | ~102.3M | 512 | no |
+
+Configured ids (identical in both modes): forecaster
+`KRONOS_MODEL_ID=NeoQuasar/Kronos-small`, tokenizer
+`KRONOS_TOKENIZER_ID=NeoQuasar/Kronos-Tokenizer-base`, `KRONOS_MAX_CONTEXT=512`,
+`KRONOS_DEVICE=cpu`. Set in `backend/app/core/config.py` (local defaults) and as
+Space env vars in `infrastructure/hf-space/app.py`; production runs
+`KRONOS_MODE=remote` (Render slim image ships without torch).
+
+**Live verification.** Backend `GET /health` reports the configured ids
+(`kronos_model_id`, `kronos_tokenizer_id`, `kronos_max_context`,
+`default_forecaster`) and, in remote mode, a `remote_inference` block echoing
+what the Space last reported loaded (populated from the 6-hourly keepalive
+ping's cached `/health` — never a blocking request). Cross-check directly
+against the Space's own `GET /health` (`kronos_model_id`, `embedding_model_id`,
+`device`, `app_version`). A forecast response's `meta.model_id` is a third
+confirmation. Embeddings use `all-MiniLM-L6-v2` (384-d), same local/remote split.
 
 ### 3.3 Backtesting (Phase 1)
 
