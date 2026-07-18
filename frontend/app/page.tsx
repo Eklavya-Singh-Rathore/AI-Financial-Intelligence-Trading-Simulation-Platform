@@ -4,6 +4,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 import Link from "next/link";
 import clsx from "clsx";
+import { Button } from "@/components/ui";
 import { api, fmtNum, fmtPct, polarity, type InstrumentSummary } from "@/lib/api";
 
 function Sparkline({ points }: { points: number[] }) {
@@ -60,14 +61,10 @@ export default function Dashboard() {
           <h1 className="text-xl font-semibold">Market overview</h1>
           <p className="text-sm text-ink-2">16-asset Indian-market universe · daily bars</p>
         </div>
-        <button
-          onClick={() => ingest.mutate()}
-          disabled={ingest.isPending}
-          className="flex items-center gap-2 rounded-md border border-line px-3 py-1.5 text-sm text-ink-2 hover:text-ink disabled:opacity-50"
-        >
-          <RefreshCw size={14} className={ingest.isPending ? "animate-spin" : ""} />
+        <Button variant="outline" size="sm" onClick={() => ingest.mutate()} disabled={ingest.isPending}>
+          <RefreshCw size={14} className={ingest.isPending ? "animate-spin motion-reduce:animate-none" : ""} />
           {ingest.isPending ? "Refreshing…" : ingest.isSuccess ? "Refresh queued" : "Refresh data"}
-        </button>
+        </Button>
       </div>
 
       {error && (
