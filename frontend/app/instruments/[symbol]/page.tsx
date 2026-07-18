@@ -23,8 +23,11 @@ export default function InstrumentPage() {
   const symbol = decodeURIComponent(raw);
   const router = useRouter();
   const [overlays, setOverlays] = useState({ sma: true, ema: false });
-  const [model, setModel] = useState<"kronos" | "baseline">("baseline");
-  const [showForecast, setShowForecast] = useState(false);
+  // Phase 6: Kronos is the default forecaster and shows on load (users can
+  // still switch to baseline or hide it). First call per idle symbol rides the
+  // Space wake-up, covered by the proxy maxDuration + keepalive.
+  const [model, setModel] = useState<"kronos" | "baseline">("kronos");
+  const [showForecast, setShowForecast] = useState(true);
   const [btParams, setBtParams] = useState({ fast: 10, slow: 30, engine: "nautilus" });
 
   const prices = useQuery({ queryKey: ["prices", symbol], queryFn: () => api.prices(symbol) });
