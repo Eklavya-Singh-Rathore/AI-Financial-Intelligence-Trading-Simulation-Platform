@@ -120,6 +120,9 @@ class Settings(BaseSettings):
     enable_news_ingest: bool = True  # daily scheduler job persisting news into RAG
     news_rag_top_k: int = 5  # news headlines retrieved per chat message
     news_retention_days: int = 180  # news documents older than this are purged
+    # Phase 6 market expansion: keep free-tier quotas honest at ~100 instruments.
+    news_ingest_daily_cap: int = 60  # max NewsAPI requests per daily news job
+    ingest_pause_seconds: float = 0.3  # sleep between per-instrument OHLCV fetches
     # Cost estimation only (per 1M tokens, USD) - configurable per provider price list.
     llm_cost_input_per_1m: float = 0.30
     llm_cost_output_per_1m: float = 2.50

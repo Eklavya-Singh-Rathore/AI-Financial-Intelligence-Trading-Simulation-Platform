@@ -34,6 +34,33 @@ def headline_hash(title: str, url: str) -> str:
     return hashlib.sha256(f"{title}|{url}".encode()).hexdigest()
 
 
+def select_news_symbols(
+    all_symbols: list[str],
+    held: set[str],
+    watched: set[str],
+    cap: int,
+    day_index: int,
+) -> list[str]:
+    """Pick which symbols get a NewsAPI request today (Phase 6 quota guard).
+
+    Priority: symbols the user holds or watches always make the cut; the
+    remaining budget cycles deterministically through the rest of the universe
+    (offset by ``day_index``) so every instrument gets coverage every few days
+    even at 100+ instruments on a 100-requests/day free tier.
+    """
+    if cap <= 0:
+        return []
+    priority = [s for s in all_symbols if s in held or s in watched]
+    rest = [s for s in all_symbols if s not in held and s not in watched]
+    chosen = priority[:cap]
+    budget = cap - len(chosen)
+    if budget > 0 and rest:
+        offset = (day_index * budget) % len(rest)
+        rotated = rest[offset:] + rest[:offset]
+        chosen.extend(rotated[:budget])
+    return chosen
+
+
 def parse_published(value: str) -> datetime | None:
     """NewsAPI ISO timestamp ('2026-07-12T08:30:00Z') -> aware datetime."""
     if not value:
