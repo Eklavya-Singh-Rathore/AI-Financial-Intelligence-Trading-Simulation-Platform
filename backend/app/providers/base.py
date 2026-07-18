@@ -67,7 +67,11 @@ class BaseProvider:
     def get_quote(self, provider_symbol: str) -> Quote | None:
         return None
 
-    def fetch_news(self, query: str, *, limit: int | None = None) -> list[NewsItem]:
+    def fetch_news(
+        self, query: str, *, symbol: str | None = None, limit: int | None = None
+    ) -> list[NewsItem]:
+        """Fetch news. ``query`` is free text (display name); ``symbol`` is the
+        provider ticker for symbol-keyed sources (Finnhub)."""
         return []
 
     def fetch_fundamentals(self, provider_symbol: str) -> FundamentalsBundle | None:

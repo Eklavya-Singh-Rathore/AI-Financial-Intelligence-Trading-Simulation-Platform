@@ -135,7 +135,7 @@ def test_registry_news_merges_and_dedupes(monkeypatch):
     class A(BaseProvider):
         code = "a"
         capabilities = frozenset({"news"})
-        def fetch_news(self, query, *, limit=None):
+        def fetch_news(self, query, *, symbol=None, limit=None):
             return [
                 NewsItem("Same", "s", "2026", url="u1"),
                 NewsItem("Only A", "s", "2026", url="u2"),
@@ -144,7 +144,7 @@ def test_registry_news_merges_and_dedupes(monkeypatch):
     class B(BaseProvider):
         code = "b"
         capabilities = frozenset({"news"})
-        def fetch_news(self, query, *, limit=None):
+        def fetch_news(self, query, *, symbol=None, limit=None):
             return [
                 NewsItem("Same", "s", "2026", url="u1"),
                 NewsItem("Only B", "s", "2026", url="u3"),

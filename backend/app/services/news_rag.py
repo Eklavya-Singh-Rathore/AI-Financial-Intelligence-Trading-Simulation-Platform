@@ -14,8 +14,9 @@ Everything here is best-effort: persistence and retrieval failures degrade to
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Protocol
 
 import structlog
 from sqlalchemy import delete, select
@@ -24,9 +25,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.models.research import ResearchDocument
 from app.services import embeddings
-from app.services.news import Headline
 
 log = structlog.get_logger(__name__)
+
+
+class _NewsLike(Protocol):
+    """Structural type shared by news.Headline and providers.NewsItem."""
+
+    title: str
+    description: str
+    published_at: str
+    url: str
 
 
 def headline_hash(title: str, url: str) -> str:
@@ -101,7 +110,7 @@ def citation_refs(docs: list[ResearchDocument]) -> list[dict[str, Any]]:
 
 
 async def ingest_headlines(
-    session: AsyncSession, symbol: str | None, headlines: list[Headline]
+    session: AsyncSession, symbol: str | None, headlines: Sequence[_NewsLike]
 ) -> int:
     """Persist + embed headlines into research_documents. Returns rows added.
 

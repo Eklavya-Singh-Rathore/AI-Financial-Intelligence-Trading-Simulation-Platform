@@ -56,3 +56,8 @@ services:
         sync: false
       - key: NEWSAPI_KEY
         sync: false
+      # Phase 6 data providers (optional; unset = the feature simply degrades)
+      - key: FINNHUB_API_KEY
+        sync: false
+      - key: ALPHA_VANTAGE_API_KEY
+        sync: false

@@ -130,7 +130,8 @@ async def news_ingest_job() -> None:
     depend on agent runs happening. Also purges documents older than the
     retention window. Advisory-locked; every failure is per-symbol best-effort.
     """
-    from app.services import market_data, news, news_rag
+    from app.providers import registry as provider_registry
+    from app.services import market_data, news_rag
 
     engine = get_engine()
     async with engine.connect() as lock_conn:
@@ -179,14 +180,21 @@ async def news_ingest_job() -> None:
                     get_settings().news_ingest_daily_cap,
                     datetime.now(UTC).timetuple().tm_yday,
                 )
+                # Provider symbols (yfinance ticker) for the Finnhub news path.
+                provider = await market_data.get_yfinance_provider(session)
+                psym_map = await market_data.get_provider_symbol_map(session, provider.id)
                 by_symbol = {i.symbol: i for i in instruments}
                 added = 0
                 for symbol in chosen:
                     inst = by_symbol[symbol]
-                    headlines = await asyncio.to_thread(
-                        news.fetch_headlines, f'"{inst.display_name}"'
+                    # NewsAPI reads the display name (free text); Finnhub reads
+                    # the provider ticker. Merged + deduped by the registry.
+                    items = await asyncio.to_thread(
+                        provider_registry.fetch_news,
+                        f'"{inst.display_name}"',
+                        symbol=psym_map.get(inst.id),
                     )
-                    added += await news_rag.ingest_headlines(session, inst.symbol, headlines)
+                    added += await news_rag.ingest_headlines(session, inst.symbol, items)
                 purged = await news_rag.purge_old_news(session)
             log.info("news_ingest_finished", universe=len(instruments),
                      requested=len(chosen), added=added, purged=purged)

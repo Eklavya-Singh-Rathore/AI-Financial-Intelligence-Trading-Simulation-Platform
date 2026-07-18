@@ -19,7 +19,9 @@ class NewsAPIProvider(BaseProvider):
     def available(self) -> bool:
         return bool(get_settings().newsapi_key)
 
-    def fetch_news(self, query: str, *, limit: int | None = None) -> list[NewsItem]:
+    def fetch_news(
+        self, query: str, *, symbol: str | None = None, limit: int | None = None
+    ) -> list[NewsItem]:
         headlines = news.fetch_headlines(query, limit=limit)
         return [
             NewsItem(

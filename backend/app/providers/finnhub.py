@@ -29,19 +29,20 @@ class FinnhubProvider(BaseProvider):
     def _headers(self) -> dict[str, str]:
         return {"X-Finnhub-Token": get_settings().finnhub_api_key or ""}
 
-    def fetch_news(self, query: str, *, limit: int | None = None) -> list[NewsItem]:
-        # Finnhub company-news is keyed by ticker symbol, not free text. Callers
-        # pass a quoted display name for NewsAPI; here we treat the query as a
-        # symbol when it looks like one, else skip (NewsAPI covers free text).
-        symbol = query.strip().strip('"')
-        if not symbol or " " in symbol:
+    def fetch_news(
+        self, query: str, *, symbol: str | None = None, limit: int | None = None
+    ) -> list[NewsItem]:
+        # Finnhub company-news is keyed by ticker, not free text. Prefer the
+        # explicit symbol hint; else treat a space-free query as a symbol.
+        sym = (symbol or query).strip().strip('"')
+        if not sym or " " in sym:
             return []
         to = datetime.now(UTC).date()
         frm = to - timedelta(days=get_settings().news_lookback_days)
         try:
             resp = httpx.get(
                 f"{_BASE}/company-news",
-                params={"symbol": symbol, "from": frm.isoformat(), "to": to.isoformat()},
+                params={"symbol": sym, "from": frm.isoformat(), "to": to.isoformat()},
                 headers=self._headers(),
                 timeout=15.0,
             )

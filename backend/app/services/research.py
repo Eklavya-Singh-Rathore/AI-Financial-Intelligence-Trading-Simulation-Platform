@@ -222,6 +222,18 @@ async def get_fundamentals(
                 "fetched_at": row.fetched_at.isoformat() if row.fetched_at else None,
                 "source": "stale-cache",
             }
+        # Optional Alpha Vantage enrichment when yfinance had nothing (Phase 6).
+        av_profile = await _alpha_vantage_profile(provider_symbol)
+        if av_profile:
+            return {
+                "profile": av_profile,
+                "income_annual": {},
+                "income_quarterly": {},
+                "balance_sheet": {},
+                "cashflow": {},
+                "fetched_at": None,
+                "source": "alpha_vantage",
+            }
         return {
             "profile": await _db_profile(session, instrument),
             "income_annual": {},
@@ -231,6 +243,47 @@ async def get_fundamentals(
             "fetched_at": None,
             "source": "db-only",
         }
+
+
+# Alpha Vantage OVERVIEW field -> our curated profile key.
+_AV_PROFILE_MAP = {
+    "Name": "longName",
+    "Description": "longBusinessSummary",
+    "Sector": "sector",
+    "Industry": "industry",
+    "MarketCapitalization": "marketCap",
+    "PERatio": "trailingPE",
+    "ForwardPE": "forwardPE",
+    "PriceToBookRatio": "priceToBook",
+    "DividendYield": "dividendYield",
+    "Beta": "beta",
+    "52WeekHigh": "fiftyTwoWeekHigh",
+    "52WeekLow": "fiftyTwoWeekLow",
+    "Currency": "currency",
+}
+
+
+async def _alpha_vantage_profile(provider_symbol: str) -> dict:
+    """Best-effort AV OVERVIEW -> profile dict; {} when unavailable/keyless."""
+    import asyncio as _asyncio
+
+    from app.providers.alpha_vantage import AlphaVantageProvider
+
+    av = AlphaVantageProvider()
+    if not av.available():
+        return {}
+    bundle = await _asyncio.to_thread(av.fetch_fundamentals, provider_symbol)
+    if bundle is None:
+        return {}
+    profile: dict = {}
+    for av_key, our_key in _AV_PROFILE_MAP.items():
+        value = bundle.data.get(av_key)
+        if value in (None, "", "None", "-"):
+            continue
+        profile[our_key] = _clean_number(value) if our_key != "longName" and our_key not in (
+            "longBusinessSummary", "sector", "industry", "currency"
+        ) else value
+    return profile
 
 
 def derive_earnings(income_quarterly: dict) -> dict[str, Any]:

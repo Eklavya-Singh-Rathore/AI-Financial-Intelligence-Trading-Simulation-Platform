@@ -70,12 +70,18 @@ def search_symbols(query: str, *, limit: int = 10) -> list[SymbolMatch]:
     return []
 
 
-def fetch_news(query: str, *, limit: int | None = None) -> list[NewsItem]:
-    """Merge news across all available news providers, deduped by title|url."""
+def fetch_news(
+    query: str, *, symbol: str | None = None, limit: int | None = None
+) -> list[NewsItem]:
+    """Merge news across all available news providers, deduped by title|url.
+
+    ``query`` is free text (NewsAPI); ``symbol`` is the provider ticker for
+    symbol-keyed sources (Finnhub).
+    """
     seen: set[str] = set()
     merged: list[NewsItem] = []
     for provider in providers_for("news"):
-        for item in provider.fetch_news(query, limit=limit):
+        for item in provider.fetch_news(query, symbol=symbol, limit=limit):
             key = f"{item.title.strip().lower()}|{item.url}"
             if key in seen:
                 continue
