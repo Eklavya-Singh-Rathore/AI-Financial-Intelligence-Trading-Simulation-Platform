@@ -5,8 +5,9 @@ import { Bot } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import clsx from "clsx";
-import { CandleChart } from "@/components/CandleChart";
+import { TradingChart } from "@/components/chart/TradingChart";
 import { ResearchSection } from "@/components/ResearchSection";
+import { Button } from "@/components/ui";
 import { api, fmtNum, fmtPct, polarity } from "@/lib/api";
 
 const METRIC_LABELS: Record<string, string> = {
@@ -22,7 +23,6 @@ export default function InstrumentPage() {
   const { symbol: raw } = useParams<{ symbol: string }>();
   const symbol = decodeURIComponent(raw);
   const router = useRouter();
-  const [overlays, setOverlays] = useState({ sma: true, ema: false });
   // Phase 6: Kronos is the default forecaster and shows on load (users can
   // still switch to baseline or hide it). First call per idle symbol rides the
   // Space wake-up, covered by the proxy maxDuration + keepalive.
@@ -30,7 +30,8 @@ export default function InstrumentPage() {
   const [showForecast, setShowForecast] = useState(true);
   const [btParams, setBtParams] = useState({ fast: 10, slow: 30, engine: "nautilus" });
 
-  const prices = useQuery({ queryKey: ["prices", symbol], queryFn: () => api.prices(symbol) });
+  // 2000 daily bars ≈ 8y so the chart's All / 3Y range presets have data.
+  const prices = useQuery({ queryKey: ["prices", symbol], queryFn: () => api.prices(symbol, 2000) });
   const indicators = useQuery({
     queryKey: ["indicators", symbol],
     queryFn: () => api.indicators(symbol, "sma,ema,rsi"),
@@ -61,29 +62,14 @@ export default function InstrumentPage() {
             RSI(14): <span className={clsx("tabular", (rsiLast ?? 50) > 70 ? "text-loss" : (rsiLast ?? 50) < 30 ? "text-gain" : "")}>{fmtNum(rsiLast ?? null)}</span>
           </p>
         </div>
-        <button
-          onClick={() => startRun.mutate()}
-          disabled={startRun.isPending}
-          className="flex items-center gap-2 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
-        >
+        <Button onClick={() => startRun.mutate()} disabled={startRun.isPending}>
           <Bot size={15} /> {startRun.isPending ? "Queuing…" : "Analyze with agents"}
-        </button>
+        </Button>
       </div>
       {startRun.error && <p className="text-sm text-loss">{String(startRun.error)}</p>}
 
-      <div className="rounded-lg border border-line p-3">
-        <div className="mb-2 flex flex-wrap items-center gap-3 text-sm">
-          {(["sma", "ema"] as const).map((k) => (
-            <label key={k} className="flex items-center gap-1.5 text-ink-2">
-              <input
-                type="checkbox"
-                checked={overlays[k]}
-                onChange={(e) => setOverlays({ ...overlays, [k]: e.target.checked })}
-              />
-              {k.toUpperCase()} 20
-            </label>
-          ))}
-          <span className="mx-1 text-line">|</span>
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-3 text-sm">
           <label className="flex items-center gap-1.5 text-ink-2">
             <input
               type="checkbox"
@@ -98,23 +84,22 @@ export default function InstrumentPage() {
               onChange={(e) => setModel(e.target.value as "kronos" | "baseline")}
               className="rounded border border-line bg-surface px-2 py-1 text-xs"
             >
-              <option value="baseline">baseline</option>
               <option value="kronos">kronos</option>
+              <option value="baseline">baseline</option>
             </select>
           )}
           {showForecast && forecast.isLoading && (
             <span className="text-xs text-ink-3">running {model}…</span>
           )}
+          {showForecast && forecast.error && (
+            <span className="text-xs text-loss">forecast unavailable</span>
+          )}
         </div>
-        {prices.isLoading && <div className="py-24 text-center text-sm text-ink-2">Loading chart…</div>}
-        {prices.data && indicators.data && (
-          <CandleChart
-            bars={prices.data.bars}
-            indicators={indicators.data.points}
-            forecast={showForecast ? (forecast.data ?? null) : null}
-            overlays={overlays}
-          />
-        )}
+        <TradingChart
+          bars={prices.data?.bars ?? []}
+          indicators={indicators.data?.points ?? []}
+          forecast={showForecast ? (forecast.data ?? null) : null}
+        />
       </div>
 
       <div className="rounded-lg border border-line p-4">
