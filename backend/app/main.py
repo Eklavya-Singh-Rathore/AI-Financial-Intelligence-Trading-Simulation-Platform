@@ -22,6 +22,7 @@ from app.api.routers import (
     ingest,
     instruments,
     simulation,
+    watchlists,
 )
 from app.core.auth import get_auth, warn_if_user_auth_disabled
 from app.core.config import get_settings
@@ -94,6 +95,7 @@ _PROTECTED = [
     chat.router,
     simulation.router,
     evaluation.router,
+    watchlists.router,
 ]
 _auth = [Depends(get_auth)]
 for router in _PROTECTED:

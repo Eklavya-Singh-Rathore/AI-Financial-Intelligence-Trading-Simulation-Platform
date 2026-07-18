@@ -15,6 +15,7 @@ from app.models.price_bar import PriceBar
 from app.models.provider import DataProvider, InstrumentProviderMapping
 from app.models.research import InstrumentFundamentals, ResearchDocument
 from app.models.simulation import SimOrder, SimPortfolio, SimPosition, SimTrade
+from app.models.watchlist import Watchlist, WatchlistItem
 
 __all__ = [
     "Instrument",
@@ -34,4 +35,6 @@ __all__ = [
     "SimPosition",
     "InstrumentFundamentals",
     "ResearchDocument",
+    "Watchlist",
+    "WatchlistItem",
 ]
