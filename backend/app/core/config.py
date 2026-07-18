@@ -100,6 +100,13 @@ class Settings(BaseSettings):
     news_lookback_days: int = 7
     news_max_headlines: int = 12
 
+    # --- Data providers (Phase 6, all optional; each degrades when keyless) ---
+    finnhub_api_key: str | None = None
+    alpha_vantage_api_key: str | None = None
+    alpha_vantage_daily_cap: int = 20  # free tier hard limit is 25/day
+    # Aggregate ordering by provider code (first available wins per capability).
+    provider_priority: str = "yfinance,finnhub,alpha_vantage,newsapi"
+
     # --- Agents (Phase 2) ---
     agents_debate_rounds: int = 1
     max_position_pct: float = 10.0
