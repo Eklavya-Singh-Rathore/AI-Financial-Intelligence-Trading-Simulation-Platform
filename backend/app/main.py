@@ -22,6 +22,7 @@ from app.api.routers import (
     health,
     ingest,
     instruments,
+    market,
     simulation,
     watchlists,
 )
@@ -98,6 +99,7 @@ _PROTECTED = [
     evaluation.router,
     watchlists.router,
     admin.router,
+    market.router,
 ]
 _auth = [Depends(get_auth)]
 for router in _PROTECTED:

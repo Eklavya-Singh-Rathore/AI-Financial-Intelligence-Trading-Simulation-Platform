@@ -206,6 +206,19 @@ async def news_ingest_job() -> None:
             )
 
 
+async def ingest_job_drain_job() -> None:
+    """Drain queued whole-market backfills (Phase 6). Advisory-locked inside
+    the service; a failed drain must not kill the app."""
+    from app.services import market_expansion
+
+    try:
+        sm = get_sessionmaker()
+        async with sm() as session:
+            await market_expansion.drain_ingest_jobs(session)
+    except Exception as exc:  # noqa: BLE001 - a failed job must not kill the app
+        log.error("ingest_job_drain_failed", error=str(exc), exc_info=True)
+
+
 async def space_keepalive_job() -> None:
     """Ping the inference Space so it never hits the free-tier idle shutdown.
 
@@ -271,6 +284,14 @@ def start_scheduler() -> AsyncIOScheduler | None:
             replace_existing=True,
             misfire_grace_time=3600,
         )
+    # Drain whole-market backfill jobs every 5 min (Phase 6).
+    scheduler.add_job(
+        ingest_job_drain_job,
+        IntervalTrigger(minutes=5),
+        id="ingest_job_drain",
+        replace_existing=True,
+        misfire_grace_time=300,
+    )
     if _remote_inference_configured(settings):
         scheduler.add_job(
             space_keepalive_job,

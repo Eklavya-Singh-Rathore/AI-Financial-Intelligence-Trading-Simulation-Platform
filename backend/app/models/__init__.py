@@ -10,6 +10,7 @@ from app.models.agent_run import AgentEmbedding, AgentMessage, AgentRun
 from app.models.backtest import Backtest
 from app.models.chat import ChatMessage, ChatSession
 from app.models.forecast import Forecast
+from app.models.ingest_job import IngestJob
 from app.models.instrument import Instrument
 from app.models.price_bar import PriceBar
 from app.models.provider import DataProvider, InstrumentProviderMapping
@@ -37,4 +38,5 @@ __all__ = [
     "ResearchDocument",
     "Watchlist",
     "WatchlistItem",
+    "IngestJob",
 ]

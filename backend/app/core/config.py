@@ -106,6 +106,8 @@ class Settings(BaseSettings):
     alpha_vantage_daily_cap: int = 20  # free tier hard limit is 25/day
     # Aggregate ordering by provider code (first available wins per capability).
     provider_priority: str = "yfinance,finnhub,alpha_vantage,newsapi"
+    # Whole-market lazy loading: hard cap on total tracked instruments.
+    max_tracked_instruments: int = 300
 
     # --- Agents (Phase 2) ---
     agents_debate_rounds: int = 1
