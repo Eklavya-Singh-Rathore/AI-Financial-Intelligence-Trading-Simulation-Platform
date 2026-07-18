@@ -14,6 +14,10 @@ export type InstrumentSummary = {
 
 export type UniverseSummary = { items: InstrumentSummary[]; total: number };
 
+export type Watchlist = {
+  id: string; name: string; created_at: string; symbols: string[];
+};
+
 export type SummaryParams = {
   q?: string; types?: string; watchlist_id?: string; limit?: number; offset?: number;
 };
@@ -275,6 +279,21 @@ export const api = {
     request<SimOrder>("simulation/proposals", {
       method: "POST",
       body: JSON.stringify({ agent_run_id: agentRunId }),
+    }),
+  watchlists: () => request<Watchlist[]>("watchlists"),
+  createWatchlist: (name: string) =>
+    request<Watchlist>("watchlists", { method: "POST", body: JSON.stringify({ name }) }),
+  renameWatchlist: (id: string, name: string) =>
+    request<Watchlist>(`watchlists/${id}`, { method: "PATCH", body: JSON.stringify({ name }) }),
+  deleteWatchlist: (id: string) => request<void>(`watchlists/${id}`, { method: "DELETE" }),
+  addWatchlistItem: (id: string, symbol: string) =>
+    request<Watchlist>(`watchlists/${id}/items`, {
+      method: "POST",
+      body: JSON.stringify({ symbol }),
+    }),
+  removeWatchlistItem: (id: string, symbol: string) =>
+    request<Watchlist>(`watchlists/${id}/items/${encodeURIComponent(symbol)}`, {
+      method: "DELETE",
     }),
   profile: (symbol: string) =>
     request<CompanyProfile>(`instruments/${encodeURIComponent(symbol)}/profile`),

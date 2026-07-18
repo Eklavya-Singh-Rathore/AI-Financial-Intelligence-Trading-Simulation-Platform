@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 import clsx from "clsx";
 import { TradingChart } from "@/components/chart/TradingChart";
 import { ResearchSection } from "@/components/ResearchSection";
+import { WatchlistStar } from "@/components/WatchlistStar";
 import { Button } from "@/components/ui";
 import { api, fmtNum, fmtPct, polarity } from "@/lib/api";
 
@@ -62,12 +63,16 @@ export default function InstrumentPage() {
   });
 
   const rsiLast = indicators.data?.points.at(-1)?.values["rsi_14"];
+  const watchlists = useQuery({ queryKey: ["watchlists"], queryFn: api.watchlists });
 
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold">{symbol}</h1>
+          <h1 className="flex items-center gap-1.5 text-xl font-semibold">
+            {symbol}
+            <WatchlistStar symbol={symbol} watchlists={watchlists.data ?? []} size={17} />
+          </h1>
           <p className="text-sm text-ink-2">
             RSI(14): <span className={clsx("tabular", (rsiLast ?? 50) > 70 ? "text-loss" : (rsiLast ?? 50) < 30 ? "text-gain" : "")}>{fmtNum(rsiLast ?? null)}</span>
           </p>
