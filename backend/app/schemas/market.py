@@ -60,6 +60,13 @@ class InstrumentSummaryOut(BaseModel):
     sparkline: list[float] = Field(default_factory=list)
 
 
+class UniverseSummaryOut(BaseModel):
+    """Paged dashboard payload (Phase 6): items + total matching count."""
+
+    items: list[InstrumentSummaryOut]
+    total: int
+
+
 class IngestRequest(BaseModel):
     symbols: list[str] | None = Field(
         default=None, description="Subset of instrument symbols; omit for the whole universe."

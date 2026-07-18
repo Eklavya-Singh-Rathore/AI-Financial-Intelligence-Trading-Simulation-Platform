@@ -99,9 +99,43 @@ async def get_price_bars(
 SUMMARY_BARS = 30  # sparkline length; also covers the 20d change window
 
 
-async def universe_summary(session: AsyncSession) -> list[dict]:
-    """Dashboard payload: latest close, 1/5/20-day changes, and a sparkline for
-    every active instrument, from ONE window-function query."""
+async def universe_summary(
+    session: AsyncSession,
+    *,
+    instrument_ids: list[uuid.UUID] | None = None,
+    q: str | None = None,
+    types: list[str] | None = None,
+    limit: int | None = None,
+    offset: int = 0,
+) -> dict:
+    """Dashboard payload (Phase 6: filterable + paged): latest close, 1/5/20-day
+    changes, and a sparkline per instrument. Returns {items, total}.
+
+    The instrument page is resolved FIRST (filters + slice), then one
+    window-function query pulls the recent bars for only that page, so cost is
+    bounded by the page size - not the whole price_bars table.
+    """
+    stmt = select(Instrument).where(Instrument.status == "active")
+    if instrument_ids is not None:
+        stmt = stmt.where(Instrument.id.in_(instrument_ids))
+    if q:
+        pattern = f"%{q.strip()}%"
+        stmt = stmt.where(
+            Instrument.symbol.ilike(pattern) | Instrument.display_name.ilike(pattern)
+        )
+    if types:
+        stmt = stmt.where(Instrument.instrument_type.in_(types))
+    stmt = stmt.order_by(Instrument.symbol)
+
+    # Instrument rows are tiny and the universe is capped (~300): fetch the
+    # filtered set once, slice in Python for the page + total.
+    matching = list((await session.execute(stmt)).scalars().all())
+    total = len(matching)
+    instruments = matching[offset : offset + limit] if limit is not None else matching[offset:]
+    if not instruments:
+        return {"items": [], "total": total}
+    page_ids = [i.id for i in instruments]
+
     rn = (
         func.row_number()
         .over(partition_by=PriceBar.instrument_id, order_by=PriceBar.date.desc())
@@ -109,7 +143,10 @@ async def universe_summary(session: AsyncSession) -> list[dict]:
     )
     recent = (
         select(PriceBar.instrument_id, PriceBar.date, PriceBar.close, PriceBar.adj_close, rn)
-        .where(PriceBar.timeframe == DEFAULT_TIMEFRAME)
+        .where(
+            PriceBar.timeframe == DEFAULT_TIMEFRAME,
+            PriceBar.instrument_id.in_(page_ids),
+        )
         .subquery()
     )
     result = await session.execute(
@@ -129,8 +166,7 @@ async def universe_summary(session: AsyncSession) -> list[dict]:
             return None
         return round((last / base - 1.0) * 100, 2)
 
-    instruments = await list_instruments(session, active_only=True)
-    summary = []
+    items = []
     for inst in instruments:
         rows = by_instrument.get(inst.id, [])
         entry: dict = {
@@ -144,8 +180,8 @@ async def universe_summary(session: AsyncSession) -> list[dict]:
             "change_20d_pct": pct_change(rows, 20),
             "sparkline": [round(float(r.adj_close or r.close), 2) for r in rows],
         }
-        summary.append(entry)
-    return summary
+        items.append(entry)
+    return {"items": items, "total": total}
 
 
 async def price_bars_dataframe(

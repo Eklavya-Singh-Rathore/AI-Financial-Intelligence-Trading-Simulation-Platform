@@ -12,6 +12,12 @@ export type InstrumentSummary = {
   sparkline: number[];
 };
 
+export type UniverseSummary = { items: InstrumentSummary[]; total: number };
+
+export type SummaryParams = {
+  q?: string; types?: string; watchlist_id?: string; limit?: number; offset?: number;
+};
+
 export type PriceBar = {
   date: string; open: number; high: number; low: number; close: number;
   adj_close: number | null; volume: number;
@@ -214,7 +220,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   health: () => request<{ status: string; database: string }>("health"),
-  summary: () => request<InstrumentSummary[]>("instruments/summary"),
+  summary: (params?: SummaryParams) => {
+    const qs = new URLSearchParams();
+    if (params?.q) qs.set("q", params.q);
+    if (params?.types) qs.set("types", params.types);
+    if (params?.watchlist_id) qs.set("watchlist_id", params.watchlist_id);
+    if (params?.limit !== undefined) qs.set("limit", String(params.limit));
+    if (params?.offset) qs.set("offset", String(params.offset));
+    const suffix = qs.size ? `?${qs}` : "";
+    return request<UniverseSummary>(`instruments/summary${suffix}`);
+  },
   prices: (symbol: string, limit = 400) =>
     request<{ symbol: string; bars: PriceBar[] }>(
       `instruments/${encodeURIComponent(symbol)}/prices?limit=${limit}`,

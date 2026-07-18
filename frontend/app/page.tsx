@@ -45,10 +45,11 @@ function Row({ r }: { r: InstrumentSummary }) {
 }
 
 export default function Dashboard() {
-  const { data, isLoading, error, refetch } = useQuery({
+  const { data: summary, isLoading, error, refetch } = useQuery({
     queryKey: ["summary"],
-    queryFn: api.summary,
+    queryFn: () => api.summary(),
   });
+  const data = summary?.items;
   const ingest = useMutation({
     mutationFn: api.ingest,
     onSuccess: () => setTimeout(() => refetch(), 20_000),
