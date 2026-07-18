@@ -3,7 +3,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Bot } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import clsx from "clsx";
 import { TradingChart } from "@/components/chart/TradingChart";
 import { ResearchSection } from "@/components/ResearchSection";
@@ -34,8 +34,18 @@ export default function InstrumentPage() {
   const prices = useQuery({ queryKey: ["prices", symbol], queryFn: () => api.prices(symbol, 2000) });
   const indicators = useQuery({
     queryKey: ["indicators", symbol],
-    queryFn: () => api.indicators(symbol, "sma,ema,rsi"),
+    queryFn: () => api.indicators(symbol, "sma,ema,rsi,macd"),
   });
+  // Trades for this symbol → buy/sell markers on the chart (memoized so the
+  // chart effect doesn't re-run on every render).
+  const trades = useQuery({ queryKey: ["simTrades"], queryFn: api.simTrades, staleTime: 60_000 });
+  const symbolTrades = useMemo(
+    () =>
+      (trades.data ?? [])
+        .filter((t) => t.symbol === symbol)
+        .map((t) => ({ date: t.created_at.slice(0, 10), side: t.side, qty: t.qty, price: t.price })),
+    [trades.data, symbol],
+  );
   const forecast = useQuery({
     queryKey: ["forecast", symbol, model],
     queryFn: () => api.forecast(symbol, model),
@@ -99,6 +109,7 @@ export default function InstrumentPage() {
           bars={prices.data?.bars ?? []}
           indicators={indicators.data?.points ?? []}
           forecast={showForecast ? (forecast.data ?? null) : null}
+          trades={symbolTrades}
         />
       </div>
 

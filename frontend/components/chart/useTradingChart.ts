@@ -13,18 +13,24 @@ import {
   LineSeries,
   LineStyle,
   createChart,
+  createSeriesMarkers,
   type IChartApi,
   type ISeriesApi,
+  type ISeriesMarkersPluginApi,
   type SeriesType,
+  type Time,
 } from "lightweight-charts";
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ForecastOut, IndicatorPoint, PriceBar } from "@/lib/api";
 import { chartColors, toTime, withAlpha } from "@/lib/chart";
+import { tradesToMarkers } from "@/lib/chartMarkers.mjs";
 import { visibleRangeFor } from "@/lib/chartRanges.mjs";
 
 export type ChartType = "candles" | "line";
 export type Overlays = { sma: boolean; ema: boolean; volume: boolean };
+export type Panes = { rsi: boolean; macd: boolean };
+export type TradeMarker = { date: string; side: string; qty: number; price: number };
 
 export type OhlcLegend = {
   date: string;
@@ -42,6 +48,9 @@ type Args = {
   forecast: ForecastOut | null;
   chartType: ChartType;
   overlays: Overlays;
+  panes: Panes;
+  trades: TradeMarker[];
+  showMarkers: boolean;
   height?: number;
 };
 
@@ -53,12 +62,17 @@ export function useTradingChart({
   forecast,
   chartType,
   overlays,
+  panes,
+  trades,
+  showMarkers,
   height = 440,
 }: Args) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const series = useRef<Map<string, AnySeries>>(new Map());
   const mainType = useRef<ChartType | null>(null);
+  const panesKey = useRef<string | null>(null);
+  const markersApi = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const dataRef = useRef({ bars, indicators });
   const { resolvedTheme } = useTheme();
   const [legend, setLegend] = useState<OhlcLegend | null>(null);
@@ -114,6 +128,8 @@ export function useTradingChart({
       chartRef.current = null;
       series.current.clear();
       mainType.current = null;
+      panesKey.current = null;
+      markersApi.current = null;
     };
   }, [height]);
 
@@ -142,8 +158,11 @@ export function useTradingChart({
       }
     };
 
-    // Main price series — swap type when chartType changes.
+    // Main price series — swap type when chartType changes (markers live on it,
+    // so detach them first; they re-attach below on the new series).
     if (mainType.current !== chartType) {
+      markersApi.current?.detach();
+      markersApi.current = null;
       drop("main");
       mainType.current = chartType;
     }
@@ -252,7 +271,91 @@ export function useTradingChart({
     } else {
       drop("forecast");
     }
-  }, [bars, indicators, forecast, chartType, overlays, resolvedTheme]);
+
+    // --- indicator sub-panes (RSI / MACD) ---------------------------------
+    // Rebuild pane series only when the enabled set changes, so pane indices
+    // stay gap-free (RSI=1, MACD after it) without empty panes.
+    const key = `${panes.rsi}:${panes.macd}`;
+    if (panesKey.current !== key) {
+      ["rsi", "macd_hist", "macd", "macd_signal"].forEach(drop);
+      panesKey.current = key;
+    }
+    const rsiPane = 1;
+    const macdPane = panes.rsi ? 2 : 1;
+    const seriesData = (valueKey: string) =>
+      indicators
+        .filter((p) => p.values[valueKey] != null)
+        .map((p) => ({ time: toTime(p.date), value: p.values[valueKey] as number }));
+
+    if (panes.rsi) {
+      if (!S.get("rsi")) {
+        const s = chart.addSeries(
+          LineSeries,
+          { lineWidth: 2, priceLineVisible: false, lastValueVisible: false },
+          rsiPane,
+        );
+        s.createPriceLine({ price: 70, color: c.loss, lineStyle: LineStyle.Dotted, lineWidth: 1 });
+        s.createPriceLine({ price: 30, color: c.gain, lineStyle: LineStyle.Dotted, lineWidth: 1 });
+        S.set("rsi", s);
+      }
+      S.get("rsi")!.applyOptions({ color: c.accent });
+      S.get("rsi")!.setData(seriesData("rsi_14"));
+    }
+    if (panes.macd) {
+      if (!S.get("macd_hist")) {
+        S.set(
+          "macd_hist",
+          chart.addSeries(
+            HistogramSeries,
+            { priceLineVisible: false, lastValueVisible: false },
+            macdPane,
+          ),
+        );
+        S.set(
+          "macd",
+          chart.addSeries(
+            LineSeries,
+            { lineWidth: 2, priceLineVisible: false, lastValueVisible: false },
+            macdPane,
+          ),
+        );
+        S.set(
+          "macd_signal",
+          chart.addSeries(
+            LineSeries,
+            { lineWidth: 1, priceLineVisible: false, lastValueVisible: false },
+            macdPane,
+          ),
+        );
+      }
+      const hist = seriesData("macd_hist").map((d) => ({
+        ...d,
+        color: withAlpha(d.value >= 0 ? c.gain : c.loss, 140),
+      }));
+      S.get("macd_hist")!.setData(hist);
+      S.get("macd")!.applyOptions({ color: c.accent });
+      S.get("macd")!.setData(seriesData("macd"));
+      S.get("macd_signal")!.applyOptions({ color: c.ink3 });
+      S.get("macd_signal")!.setData(seriesData("macd_signal"));
+    }
+    // Give the price pane the bulk of the height, sub-panes a slim share.
+    const paneApis = chart.panes();
+    paneApis[0]?.setStretchFactor(4);
+    for (let i = 1; i < paneApis.length; i++) paneApis[i]?.setStretchFactor(1.4);
+
+    // --- trade markers on the price series --------------------------------
+    if (showMarkers && trades.length) {
+      const main2 = S.get("main");
+      if (main2) {
+        if (!markersApi.current) markersApi.current = createSeriesMarkers(main2, []);
+        markersApi.current.setMarkers(
+          tradesToMarkers(trades, { gain: c.gain, loss: c.loss }) as never,
+        );
+      }
+    } else {
+      markersApi.current?.setMarkers([]);
+    }
+  }, [bars, indicators, forecast, chartType, overlays, panes, trades, showMarkers, resolvedTheme]);
 
   const setRange = useCallback((preset: string) => {
     const chart = chartRef.current;
