@@ -2,7 +2,9 @@
 
 import { useQuery } from "@tanstack/react-query";
 import {
+  ArrowLeftRight,
   Bot,
+  BriefcaseBusiness,
   CandlestickChart,
   LayoutDashboard,
   Lightbulb,
@@ -14,7 +16,6 @@ import {
   PanelLeftOpen,
   Search,
   Sun,
-  Wallet,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -32,7 +33,8 @@ type NavItem = { href: string; label: string; icon: LucideIcon };
 
 const NAV: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/simulation", label: "Simulation", icon: Wallet },
+  { href: "/portfolio", label: "Portfolio", icon: BriefcaseBusiness },
+  { href: "/simulation", label: "Simulation", icon: ArrowLeftRight },
   { href: "/agents", label: "Agents", icon: Bot },
   { href: "/insights", label: "Insights", icon: Lightbulb },
   { href: "/chat", label: "Chat", icon: MessageSquare },
