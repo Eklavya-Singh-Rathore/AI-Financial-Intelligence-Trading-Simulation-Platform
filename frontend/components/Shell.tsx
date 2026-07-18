@@ -12,6 +12,7 @@ import {
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
+  Search,
   Sun,
   Wallet,
   type LucideIcon,
@@ -21,6 +22,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import clsx from "clsx";
+import { SearchCommand, SearchTrigger } from "@/components/SearchCommand";
 import { Sheet } from "@/components/ui";
 import { api } from "@/lib/api";
 import { isActive, pageTitle } from "@/lib/nav.mjs";
@@ -198,9 +200,23 @@ export function Shell({ children }: { children: React.ReactNode }) {
           collapsed ? "w-16" : "w-56",
         )}
       >
-        <div className={clsx("mb-6 flex items-center px-1", collapsed ? "justify-center" : "justify-between")}>
+        <div className={clsx("mb-4 flex items-center px-1", collapsed ? "justify-center" : "justify-between")}>
           <Brand collapsed={collapsed} />
         </div>
+        {collapsed ? (
+          <button
+            type="button"
+            aria-label="Search"
+            onClick={() => window.dispatchEvent(new Event("finintel:open-search"))}
+            className="mx-auto mb-3 rounded-md border border-line p-1.5 text-ink-3 hover:text-ink"
+          >
+            <Search size={16} />
+          </button>
+        ) : (
+          <div className="mb-3">
+            <SearchTrigger className="w-full justify-start" />
+          </div>
+        )}
         <NavList pathname={pathname} collapsed={collapsed} />
         <div className="mt-auto flex flex-col gap-2 pt-4">
           <UserBox collapsed={collapsed} />
@@ -235,6 +251,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <Brand />
           <span className="truncate text-sm font-medium text-ink-2">{pageTitle(pathname, NAV_META)}</span>
           <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              aria-label="Search"
+              onClick={() => window.dispatchEvent(new Event("finintel:open-search"))}
+              className="rounded-md p-1.5 text-ink-3 hover:text-ink"
+            >
+              <Search size={18} />
+            </button>
             <HealthDot compact />
             <ThemeToggle />
           </div>
@@ -242,6 +266,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
         <main className="min-w-0 flex-1 p-4 lg:p-6">{children}</main>
       </div>
+
+      {/* Single command-palette instance (Cmd/Ctrl-K, or the triggers above). */}
+      <SearchCommand />
 
       {/* Mobile nav drawer */}
       <Sheet open={navOpen} onClose={() => setNavOpen(false)} side="left" title={<Brand />}>

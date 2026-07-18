@@ -33,6 +33,15 @@ export default function InstrumentPage() {
 
   // 2000 daily bars ≈ 8y so the chart's All / 3Y range presets have data.
   const prices = useQuery({ queryKey: ["prices", symbol], queryFn: () => api.prices(symbol, 2000) });
+  // Backfill status for freshly tracked symbols (Phase 6): poll while queued/running.
+  const track = useQuery({
+    queryKey: ["trackStatus", symbol],
+    queryFn: () => api.trackStatus(symbol),
+    retry: false,
+    refetchInterval: (q) =>
+      q.state.data && ["queued", "running"].includes(q.state.data.status) ? 2500 : false,
+  });
+  const backfilling = track.data && ["queued", "running"].includes(track.data.status);
   const indicators = useQuery({
     queryKey: ["indicators", symbol],
     queryFn: () => api.indicators(symbol, "sma,ema,rsi,macd"),
@@ -82,6 +91,11 @@ export default function InstrumentPage() {
         </Button>
       </div>
       {startRun.error && <p className="text-sm text-loss">{String(startRun.error)}</p>}
+      {backfilling && (
+        <div className="rounded-md border border-accent/30 bg-accent/5 p-2.5 text-sm text-accent">
+          Backfilling price history… the chart will fill in shortly.
+        </div>
+      )}
 
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-3 text-sm">

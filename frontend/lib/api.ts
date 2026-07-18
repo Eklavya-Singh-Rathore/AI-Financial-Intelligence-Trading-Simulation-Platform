@@ -18,6 +18,20 @@ export type Watchlist = {
   id: string; name: string; created_at: string; symbols: string[];
 };
 
+export type MarketSearchResult = {
+  provider_symbol: string; name: string; exchange: string | null;
+  asset_type: string | null; already_tracked: boolean;
+};
+
+export type TrackResult = {
+  symbol: string; provider_symbol: string; created: boolean; job_queued: boolean;
+};
+
+export type TrackStatus = {
+  symbol: string; status: string; bars: number;
+  first_date: string | null; last_date: string | null; error: string | null;
+};
+
 export type SummaryParams = {
   q?: string; types?: string; watchlist_id?: string; limit?: number; offset?: number;
 };
@@ -280,6 +294,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ agent_run_id: agentRunId }),
     }),
+  marketSearch: (q: string) =>
+    request<{ results: MarketSearchResult[] }>(`market/search?q=${encodeURIComponent(q)}`),
+  marketTrack: (symbol: string) =>
+    request<TrackResult>("market/track", { method: "POST", body: JSON.stringify({ symbol }) }),
+  trackStatus: (symbol: string) =>
+    request<TrackStatus>(`market/track/${encodeURIComponent(symbol)}/status`),
   watchlists: () => request<Watchlist[]>("watchlists"),
   createWatchlist: (name: string) =>
     request<Watchlist>("watchlists", { method: "POST", body: JSON.stringify({ name }) }),
