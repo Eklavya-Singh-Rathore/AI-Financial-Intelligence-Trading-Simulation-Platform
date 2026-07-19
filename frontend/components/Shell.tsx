@@ -23,6 +23,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import clsx from "clsx";
+import { AssistantDock } from "@/components/assistant/AssistantDock";
 import { SearchCommand, SearchTrigger } from "@/components/SearchCommand";
 import { Sheet } from "@/components/ui";
 import { api } from "@/lib/api";
@@ -271,6 +272,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
       {/* Single command-palette instance (Cmd/Ctrl-K, or the triggers above). */}
       <SearchCommand />
+
+      {/* Site-wide floating AI assistant (hidden on /login via its own guard). */}
+      <AssistantDock />
 
       {/* Mobile nav drawer */}
       <Sheet open={navOpen} onClose={() => setNavOpen(false)} side="left" title={<Brand />}>

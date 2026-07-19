@@ -55,7 +55,11 @@ async function proxy(req: NextRequest, path: string[]): Promise<NextResponse> {
       { status: 502 },
     );
   }
-  const text = await upstream.text();
+  // 204/205/304 are null-body statuses: passing any body (even "") to the
+  // Response constructor throws a TypeError, which surfaces as a 500. DELETE
+  // endpoints return 204, so forward those with a null body.
+  const nullBody = upstream.status === 204 || upstream.status === 205 || upstream.status === 304;
+  const text = nullBody ? null : await upstream.text();
   return new NextResponse(text, {
     status: upstream.status,
     headers: { "content-type": upstream.headers.get("content-type") ?? "application/json" },
