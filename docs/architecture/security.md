@@ -19,11 +19,13 @@ context — loudly warned at startup.
 
 ## Per-user isolation
 
-`user_id` on `chat_sessions`, `agent_runs`, `backtests`, `forecasts`, and
-(Phase 5) `sim_portfolios`/`sim_orders`/`sim_trades`. The
-backend stamps the caller's id on write and filters by owner on read;
-cross-user access returns `404`. Verified live with distinct users (and with the
-guest account, which is an ordinary `user`).
+`user_id` on `chat_sessions`, `agent_runs`, `backtests`, `forecasts`,
+(Phase 5) `sim_portfolios`/`sim_orders`/`sim_trades`, and (Phase 6)
+`watchlists`. The backend stamps the caller's id on write and filters by owner
+on read; cross-user access returns `404`. Verified live with distinct users
+(and with the guest account, which is an ordinary `user`). The Phase 6 admin
+catalog-sync route (`POST /admin/catalog/sync`) is gated on `auth.privileged`
+(`service`/`admin`) — it returns `403` for ordinary users.
 
 ## Guest access (Phase 4.6)
 
@@ -69,12 +71,17 @@ message (never reveal whether the account exists).
 
 All secrets come from environment variables (`.env` git-ignored; Vercel/Render/
 Space/GitHub env stores). Publishable Supabase anon keys are public by design.
-See [environment.md](../environment.md) for where each is set.
+The Phase 6 provider keys (`FINNHUB_API_KEY`, `ALPHA_VANTAGE_API_KEY`) are
+secrets — only placeholder tokens ship in `.env.example`/`render.yaml`
+(`sync: false`), and every provider degrades to empty when its key is absent, so
+the platform never depends on a committed key. See
+[environment.md](../environment.md) for where each is set.
 
 ## Owner actions / known gaps
 
 - Rotate every credential shared during development (DB password, LLM/News keys,
-  Render API key, HF token → fine-grained read; regenerate `API_KEY`).
+  Render API key, HF token → fine-grained read; regenerate `API_KEY`). Phase 6:
+  set + rotate `FINNHUB_API_KEY` / `ALPHA_VANTAGE_API_KEY` as Render secrets.
 - Enable Supabase leaked-password protection (dashboard setting).
 - Create the least-privilege `app_rw` DB role.
 - `vector` extension lives in `public` (accepted; low risk).

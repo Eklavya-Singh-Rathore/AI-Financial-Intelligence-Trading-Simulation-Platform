@@ -115,7 +115,7 @@ BASE=https://<service>.onrender.com
 curl -s $BASE/live                     # {"status":"alive"}
 curl -s $BASE/health                   # database:"ok", kronos_mode:"remote", embeddings_mode:"remote"
 curl -s $BASE/instruments              # 401 without credentials (auth matrix)
-curl -s -H "X-API-Key: $API_KEY" $BASE/instruments                        # 16 assets
+curl -s -H "X-API-Key: $API_KEY" $BASE/instruments                        # tracked universe (16 pre-sync; ~100 after POST /admin/catalog/sync)
 curl -s -H "X-API-Key: $API_KEY" "$BASE/instruments/RELIANCE/forecast?horizon=5&model=kronos&persist=false"
 curl -s -H "X-API-Key: $API_KEY" -X POST $BASE/backtest -H "Content-Type: application/json" \
   -d '{"symbol":"RELIANCE","fast":10,"slow":30}'

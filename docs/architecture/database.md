@@ -10,14 +10,15 @@ and direct hosts are IPv6-only.
 
 The project **adopts** a pre-existing market-data warehouse and adds its own
 owned tables. Migrations are Alembic, applied to Supabase with
-`alembic_version` stamped in lockstep. **Head: `0013_run_context`.**
+`alembic_version` stamped in lockstep. **Head: `0015_ingest_jobs`.**
 
 | Group | Tables |
 |---|---|
-| Market data (adopted, read) | `instruments` (16, incl. `sector_id`/`industry_id` classification FKs), `price_bars` (~11,800+ real bars), `data_providers`, `instrument_provider_mappings`, `exchanges`, and the warehouse tables |
+| Market data (adopted, read) | `instruments` (curated Nifty-100 + on-demand, incl. `sector_id`/`industry_id` classification FKs), `price_bars`, `data_providers`, `instrument_provider_mappings`, `exchanges`, and the warehouse tables |
 | Project-owned | `forecasts`, `backtests`, `agent_runs` (+`idempotency_key`, +`context_snapshot`), `agent_messages`, `chat_sessions`, `chat_messages` |
 | Paper trading (Phase 5) | `sim_portfolios` (one per owner, unique over `COALESCE(user_id, zero-uuid)`), `sim_orders`, `sim_trades`, `sim_positions` |
 | Research (Phase 5) | `instrument_fundamentals` (yfinance JSONB cache, TTL), `research_documents` (news corpus, `content_hash` dedupe, `vector(384)`) |
+| Market expansion (Phase 6) | `watchlists`, `watchlist_items` (per-user, `0014`); `ingest_jobs` (durable track/backfill queue: status queued/running/done/error, `0015`) |
 | Semantic memory | `agent_embeddings` (`vector(384)`, pgvector) |
 
 ## Migration history (Alembic)
@@ -27,7 +28,9 @@ owned tables. Migrations are Alembic, applied to Supabase with
 admin-grant trigger) → `0010_revoke_admin_execute` (revoke RPC EXECUTE on
 the `SECURITY DEFINER` trigger function) → `0011_simulation` (paper-trading
 tables) → `0012_research` (fundamentals cache + news-RAG corpus) →
-**`0013_run_context`** (`agent_runs.context_snapshot` for explainability).
+`0013_run_context` (`agent_runs.context_snapshot` for explainability) →
+`0014_watchlists` (per-user watchlists) → **`0015_ingest_jobs`** (durable
+whole-market track/backfill queue).
 
 Migrations run manually (`cd backend && alembic upgrade head`) from a dev
 machine or CI; never at app boot. CI's integration job applies the full chain
@@ -39,8 +42,8 @@ roles).
 ## Per-user ownership (migration 0009)
 
 `user_id UUID` (nullable, indexed) on `chat_sessions`, `agent_runs`,
-`backtests`, `forecasts`, and (Phase 5) `sim_portfolios`/`sim_orders`/
-`sim_trades`. On write the backend stamps the caller's `user_id`;
+`backtests`, `forecasts`, (Phase 5) `sim_portfolios`/`sim_orders`/`sim_trades`,
+and (Phase 6) `watchlists`. On write the backend stamps the caller's `user_id`;
 on read, non-privileged callers are filtered to their own rows
 (`AuthContext.owner_filter_id()`), cross-user access returns `404`, and legacy
 `NULL` rows are visible only to `admin`/`service`. Guest accounts are ordinary

@@ -1,15 +1,29 @@
 # AI Financial Intelligence Platform
 
-AI-driven **decision-support** system for a fixed 16-asset Indian-market universe
-(NIFTY 50, Sensex, gold/silver ETFs, and 12 blue-chip NSE stocks). It ingests
-market data, computes technical indicators, forecasts prices with the
+AI-driven **decision-support** system for the Indian market — a curated
+**Nifty-100 universe** (~100 instruments) that **lazy-loads the rest of the
+NSE/BSE market on demand**. It ingests market data, computes technical
+indicators, forecasts prices with the
 [Kronos](https://github.com/shiyu-coder/Kronos) foundation model, and backtests
 strategies on [NautilusTrader](https://nautilustrader.io). **No real trading** —
 simulation and analytics only.
 
-## Status: Phase 5 — intelligence, research & paper trading
+## Status: Phase 6 — professional trading experience & market expansion
 
-Phase 5 adds a **paper-trading simulator** (human-in-the-loop AI proposals —
+Phase 6 delivers a **professional UI/UX redesign** (a design-token system and
+hand-built component library, a responsive app shell, and TradingView-grade
+charting on [lightweight-charts](https://github.com/tradingview/lightweight-charts)),
+**market expansion** (a curated Nifty-100 catalog with idempotent admin sync,
+plus whole-market lazy loading — search → track → durable ingest-job queue →
+backfill), a dedicated **Portfolio page** with **advanced analytics** (numpy-only
+Value-at-Risk, Monte-Carlo simulation, and mean-variance optimization), a
+redesigned focused **Simulation** workspace, a site-wide **floating AI
+assistant**, a **command palette** (Cmd/Ctrl-K to search and track symbols), and
+**external data providers** (Finnhub + Alpha Vantage behind a capability-based
+abstraction that degrades to keyless yfinance). Kronos forecast is enabled by
+default (`DEFAULT_FORECASTER=kronos`). Scope: India-only, ~300-instrument cap.
+
+Phase 5 added a **paper-trading simulator** (human-in-the-loop AI proposals —
 the AI never auto-executes), **financial research** (company profiles,
 statements, derived earnings analysis), a **news-RAG corpus with chat
 citations**, **explainable recommendations** (decision inputs snapshotted per
@@ -51,6 +65,15 @@ isolation (4), Next.js dashboard/chat (3), agents + RAG (2), audit hardening
 | Explainability (`/explanation`: decision inputs snapshotted at gather time) | ✅ Phase 5 |
 | Portfolio intelligence (risk score, sector exposure, HHI, correlation, suggestions) | ✅ Phase 5 |
 | AI evaluation (`/evaluation/summary`: forecast MAPE, agent agreement, success rate, cost) | ✅ Phase 5 |
+| Professional UI (design tokens + `components/ui/*` primitives, responsive shell, mobile drawer) | ✅ Phase 6 |
+| TradingView-grade charting (lightweight-charts: candles/volume, MA overlays, forecast band, trade markers) | ✅ Phase 6 |
+| Market expansion — curated Nifty-100 catalog + idempotent admin sync (`POST /admin/catalog/sync`) | ✅ Phase 6 |
+| Whole-market lazy load (search → track → durable `ingest_jobs` queue → backfill, `MAX_TRACKED_INSTRUMENTS` cap) | ✅ Phase 6 |
+| Watchlists (per-user lists, dashboard tabs, star toggles) | ✅ Phase 6 |
+| Command palette (Cmd/Ctrl-K: search the universe + track new symbols) | ✅ Phase 6 |
+| Portfolio page + analytics (numpy-only VaR, Monte-Carlo GBM, mean-variance optimization) | ✅ Phase 6 |
+| Floating AI assistant (site-wide dock, dedicated session, route-aware grounding) | ✅ Phase 6 |
+| External data providers (Finnhub + Alpha Vantage behind a capability abstraction, degrade to keyless) | ✅ Phase 6 |
 
 ### Agents API
 
@@ -63,21 +86,27 @@ until `completed`, then read the full transcript at
 ## Architecture
 
 Modular monolith: FastAPI backend (this repo, `backend/`) + Supabase Postgres
-(pre-existing schema: `instruments`, `price_bars`, `data_providers`,
+(pre-existing warehouse schema: `instruments`, `price_bars`, `data_providers`,
 `instrument_provider_mappings`, pgvector). This project **adopts** that schema —
-Alembic continues from the existing head (`0004_warehouse`) and adds only
-`forecasts` and `backtests` (revision `0005_forecasts_backtests`).
+Alembic continues from the existing head (`0004_warehouse`) and now runs through
+**`0015_ingest_jobs`**, adding forecasts/backtests, agent runs/messages/
+embeddings, chat sessions, the paper-trading tables, the news-RAG corpus, and
+(Phase 6) watchlists and the durable `ingest_jobs` queue.
 
 ```
 backend/app/
-├── api/routers/     # health, instruments (prices/indicators/forecast), ingest, backtest
+├── api/routers/     # health, instruments, ingest, backtest, agents, chat, simulation,
+│                    #   research, evaluation, watchlists, market, admin (Phase 6)
 ├── core/            # settings (pydantic-settings), structlog config, domain constants
 ├── db/              # async SQLAlchemy engine/session
-├── models/          # ORM: existing tables (read) + forecasts/backtests (owned)
-├── services/        # market_data, data_ingest, indicators, forecast/backtest, space_client
+├── models/          # ORM: warehouse tables (read) + owned tables (forecasts…watchlists, ingest_jobs)
+├── services/        # market_data, data_ingest, indicators, forecast/backtest, space_client,
+│                    #   instrument_admin, market_expansion, portfolio_analytics (Phase 6)
+├── catalog/         # curated Nifty-100 universe (CatalogEntry tuple) — Phase 6
+├── providers/       # external-data abstraction: base, yfinance, finnhub, alpha_vantage — Phase 6
 ├── ml/              # Forecaster interface, baseline + Kronos (local & remote), registry
 ├── backtesting/     # Backtester interface, NautilusTrader + simple engines, strategies
-└── scheduler/       # APScheduler: daily ingest + inference-Space keep-warm ping
+└── scheduler/       # APScheduler: daily ingest, news ingest, sim sweep, ingest-job drain, keep-warm
 ```
 
 ### Production topology (Phase 4.5)
@@ -145,15 +174,20 @@ uvicorn app.main:app --reload                     # Swagger at http://localhost:
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /health` | liveness + DB connectivity |
-| `GET /instruments` | the 16-asset universe |
+| `GET /health` | liveness + DB connectivity (+ Kronos/embedding model ids, remote-inference status) |
+| `GET /instruments` | the tracked universe |
+| `GET /instruments/summary?q=&types=&watchlist_id=&limit=&offset=` | paginated/searchable universe summary with last close + deltas (Phase 6) |
 | `POST /ingest/run` | fetch & upsert OHLCV (idempotent) |
 | `GET /instruments/{symbol}/prices` | stored OHLCV |
 | `GET /instruments/{symbol}/indicators?names=sma,rsi` | computed indicators |
 | `GET /instruments/{symbol}/forecast?horizon=5&model=kronos` | price forecast |
-| `GET /instruments/{symbol}/profile` `/financials` `/earnings` | company research (yfinance, TTL-cached) |
+| `GET /instruments/{symbol}/profile` `/financials` `/earnings` | company research (yfinance/Alpha Vantage, TTL-cached) |
 | `POST /backtest` | run SMA-crossover backtest (nautilus or simple engine) |
 | `GET/POST /simulation/*` | paper trading: portfolio, orders, trades, performance, intelligence, proposals |
+| `GET /simulation/analytics/risk\|montecarlo\|optimization` | portfolio analytics — VaR, Monte-Carlo GBM, mean-variance frontier (Phase 6) |
+| `GET/POST/PATCH/DELETE /watchlists/*` | per-user watchlists CRUD (Phase 6) |
+| `GET /market/search?q=` · `POST /market/track` · `GET /market/track/{symbol}/status` | whole-market lazy load (Phase 6) |
+| `GET /admin/catalog` · `POST /admin/catalog/sync` | curated-catalog plan + idempotent sync (privileged; Phase 6) |
 | `GET /agents/runs/{id}/explanation` | deterministic recommendation explanation |
 | `GET /evaluation/summary` | AI quality & cost metrics |
 
@@ -178,7 +212,7 @@ provider tickers like `RELIANCE.NS` are resolved via `instrument_provider_mappin
 Either way `model=baseline` always works, and a Kronos failure returns a clear
 503 (agent runs fall back to baseline automatically).
 
-### Frontend (Phase 3)
+### Frontend (Phase 3, redesigned Phase 6)
 
 ```bash
 cd frontend
@@ -187,10 +221,21 @@ cp .env.example .env.local    # BACKEND_URL + BACKEND_API_KEY (server-side only)
 npm run dev                   # http://localhost:3000 (backend must run on :8000)
 ```
 
-Next.js 15 (App Router, TS) + Tailwind v4 + TanStack Query + TradingView
-lightweight-charts + next-themes (system-adaptive light/dark). All API calls go
+Next.js 15 (App Router, TS) + Tailwind v4 (CSS-var design tokens) + TanStack
+Query + TradingView lightweight-charts + next-themes (system-adaptive
+light/dark). Phase 6 adds a hand-built primitive library (`components/ui/*` —
+Card, Stat, Table, Badge, Button, Input, Sheet, EmptyState, Skeleton…), a
+responsive app shell with a mobile drawer, a professional `TradingChart`
+(persisted chart instance, MA overlays, forecast band, trade markers), a
+Cmd/Ctrl-K command palette, a dedicated Portfolio analytics page, a redesigned
+Simulation workspace, and a site-wide floating AI assistant. All API calls go
 through the authenticated same-origin proxy at `app/api/backend/[...path]` —
 the backend API key never reaches the browser.
+
+Pages: `/` dashboard (watchlist-aware universe table) · `/instruments/[symbol]`
+(chart + forecast + research + agent runs) · `/portfolio` (analytics) ·
+`/simulation` (paper trading) · `/agents` + `/agents/[runId]` · `/insights` ·
+`/chat` · `/login`.
 
 ## Development
 
