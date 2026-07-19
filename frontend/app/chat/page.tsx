@@ -1,11 +1,12 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Send, Trash2 } from "lucide-react";
+import { MessageSquare, Plus, Send, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import clsx from "clsx";
 import { ContextChips } from "@/components/chat/ContextChips";
+import { Button, EmptyState, Input } from "@/components/ui";
 import { api } from "@/lib/api";
 
 export default function ChatPage() {
@@ -57,12 +58,14 @@ export default function ChatPage() {
   return (
     <div className="flex h-[calc(100vh-3rem)] gap-4">
       <aside className="flex w-60 shrink-0 flex-col rounded-lg border border-line">
-        <button
+        <Button
+          variant="outline"
+          size="sm"
           onClick={() => createSession.mutate()}
-          className="m-2 flex items-center justify-center gap-1.5 rounded-md border border-line px-2 py-1.5 text-sm text-ink-2 hover:text-ink"
+          className="m-2"
         >
           <Plus size={14} /> New chat
-        </button>
+        </Button>
         <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
           {sessions.data?.map((s) => (
             <div
@@ -88,8 +91,12 @@ export default function ChatPage() {
 
       <section className="flex min-w-0 flex-1 flex-col rounded-lg border border-line">
         {!active ? (
-          <div className="flex flex-1 items-center justify-center text-sm text-ink-3">
-            Start a new chat — ask about any instrument, forecast, or agent decision.
+          <div className="flex flex-1 items-center justify-center">
+            <EmptyState
+              icon={MessageSquare}
+              title="Start a conversation"
+              description="Ask about any instrument, its forecast, recent news, or a past agent decision."
+            />
           </div>
         ) : (
           <>
@@ -122,22 +129,22 @@ export default function ChatPage() {
               <div ref={bottom} />
             </div>
             <div className="flex gap-2 border-t border-line p-3">
-              <input
+              <Input
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && submit()}
                 placeholder="How does RELIANCE look this week?"
                 disabled={send.isPending}
-                className="min-w-0 flex-1 rounded-md border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent disabled:opacity-60"
+                className="flex-1"
               />
-              <button
+              <Button
                 onClick={submit}
                 disabled={send.isPending || !draft.trim()}
+                size="icon"
                 aria-label="Send"
-                className="rounded-md bg-accent px-3 py-2 text-white hover:opacity-90 disabled:opacity-50"
               >
                 <Send size={15} />
-              </button>
+              </Button>
             </div>
           </>
         )}

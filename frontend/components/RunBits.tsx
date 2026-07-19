@@ -1,18 +1,19 @@
 "use client";
 
 import clsx from "clsx";
+import { Badge } from "@/components/ui";
+import { type Tone } from "@/lib/ui";
 import type { AgentRun } from "@/lib/api";
 
+const STATUS_TONE: Record<string, Tone> = {
+  completed: "gain",
+  failed: "loss",
+  running: "accent",
+  pending: "accent",
+};
+
 export function StatusChip({ status }: { status: string }) {
-  const style =
-    status === "completed"
-      ? "bg-gain/10 text-gain"
-      : status === "failed"
-        ? "bg-loss/10 text-loss"
-        : "bg-accent/10 text-accent";
-  return (
-    <span className={clsx("rounded-full px-2 py-0.5 text-xs font-medium", style)}>{status}</span>
-  );
+  return <Badge tone={STATUS_TONE[status] ?? "neutral"}>{status}</Badge>;
 }
 
 export function DecisionBadge({ run }: { run: AgentRun }) {
