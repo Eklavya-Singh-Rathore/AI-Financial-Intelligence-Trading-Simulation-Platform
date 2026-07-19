@@ -13,6 +13,10 @@
   --ink: #0f172a;
   --ink-2: #475569;
   --ink-3: #94a3b8;
+  /* elevation (Phase 6): subtle, ink-hued */
+  --shadow-xs-val: 0 1px 2px 0 rgb(15 23 42 / 0.05);
+  --shadow-sm-val: 0 1px 3px 0 rgb(15 23 42 / 0.09), 0 1px 2px -1px rgb(15 23 42 / 0.06);
+  --shadow-md-val: 0 4px 12px -2px rgb(15 23 42 / 0.10), 0 2px 6px -2px rgb(15 23 42 / 0.06);
 }
 
 .dark {
@@ -26,6 +30,9 @@
   --ink: #f1f5f9;
   --ink-2: #94a3b8;
   --ink-3: #64748b;
+  --shadow-xs-val: 0 1px 2px 0 rgb(0 0 0 / 0.30);
+  --shadow-sm-val: 0 1px 3px 0 rgb(0 0 0 / 0.45), 0 1px 2px -1px rgb(0 0 0 / 0.40);
+  --shadow-md-val: 0 6px 16px -4px rgb(0 0 0 / 0.55), 0 2px 6px -2px rgb(0 0 0 / 0.45);
 }
 
 @theme inline {
@@ -38,11 +45,44 @@
   --color-ink: var(--ink);
   --color-ink-2: var(--ink-2);
   --color-ink-3: var(--ink-3);
+
+  /* Typography: Inter for UI, JetBrains Mono for numerics (next/font vars). */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, "SF Mono", Menlo, monospace;
+
+  --shadow-xs: var(--shadow-xs-val);
+  --shadow-sm: var(--shadow-sm-val);
+  --shadow-md: var(--shadow-md-val);
+
+  /* Motion: subtle, ease-out (product register — 150–250ms, conveys state). */
+  --animate-fade-in: fade-in 150ms ease-out;
+  --animate-slide-in-right: slide-in-right 200ms cubic-bezier(0.22, 1, 0.36, 1);
+  --animate-slide-in-bottom: slide-in-bottom 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slide-in-right {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+@keyframes slide-in-bottom {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
 }
 
 html, body {
   background: var(--surface);
   color: var(--ink);
+  font-family: var(--font-sans);
 }
 
-.tabular { font-variant-numeric: tabular-nums; }
+/* Numerics render in the monospace face with tabular figures so columns of
+   prices / percentages align (professional trading-terminal convention). */
+.tabular {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}

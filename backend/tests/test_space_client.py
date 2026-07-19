@@ -243,3 +243,12 @@ def test_health_calls_get(clock):
     client = make_client(handler)
     assert client.health() == {"status": "ok"}
     assert seen == {"method": "GET", "path": "/health"}
+
+
+def test_health_caches_last_payload(clock):
+    payload = {"status": "ok", "kronos_model_id": "NeoQuasar/Kronos-small"}
+    client = make_client(lambda r: httpx.Response(200, json=payload))
+    assert client.last_health is None
+    client.health()
+    assert client.last_health == payload
+    assert client.last_health_at is not None

@@ -130,11 +130,13 @@ async def seeded(session):
 
 
 async def test_universe_summary_shape(session):
-    """Summary returns one entry per ACTIVE instrument with the dashboard fields."""
+    """Summary returns {items, total} for ACTIVE instruments (Phase 6 shape)."""
     from app.services.market_data import universe_summary
 
-    rows = await universe_summary(session)
-    for row in rows:
+    data = await universe_summary(session)
+    assert set(data) == {"items", "total"}
+    assert data["total"] == len(data["items"])  # no limit -> full set
+    for row in data["items"]:
         assert set(row) >= {
             "symbol", "display_name", "instrument_type", "last_date",
             "last_close", "change_1d_pct", "change_5d_pct", "change_20d_pct",
@@ -142,6 +144,29 @@ async def test_universe_summary_shape(session):
         }
         assert len(row["sparkline"]) <= 30
         assert row["symbol"] != SYMBOL  # suspended test instrument excluded
+
+
+async def test_universe_summary_filters_and_pagination(session):
+    """q/types filter and limit/offset slice while total reports the match count."""
+    from app.services.market_data import universe_summary
+
+    everything = await universe_summary(session)
+    total = everything["total"]
+    if total < 2:
+        pytest.skip("needs at least 2 active instruments")
+
+    paged = await universe_summary(session, limit=1, offset=1)
+    assert len(paged["items"]) == 1
+    assert paged["total"] == total
+    assert paged["items"][0]["symbol"] == everything["items"][1]["symbol"]
+
+    first_symbol = everything["items"][0]["symbol"]
+    hit = await universe_summary(session, q=first_symbol[:4].lower())
+    assert any(r["symbol"] == first_symbol for r in hit["items"])
+    assert hit["total"] <= total
+
+    none = await universe_summary(session, q="zzz-no-such-instrument")
+    assert none == {"items": [], "total": 0}
 
 
 async def test_migrations_created_project_tables(session):

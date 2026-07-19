@@ -10,11 +10,13 @@ from app.models.agent_run import AgentEmbedding, AgentMessage, AgentRun
 from app.models.backtest import Backtest
 from app.models.chat import ChatMessage, ChatSession
 from app.models.forecast import Forecast
+from app.models.ingest_job import IngestJob
 from app.models.instrument import Instrument
 from app.models.price_bar import PriceBar
 from app.models.provider import DataProvider, InstrumentProviderMapping
 from app.models.research import InstrumentFundamentals, ResearchDocument
 from app.models.simulation import SimOrder, SimPortfolio, SimPosition, SimTrade
+from app.models.watchlist import Watchlist, WatchlistItem
 
 __all__ = [
     "Instrument",
@@ -34,4 +36,7 @@ __all__ = [
     "SimPosition",
     "InstrumentFundamentals",
     "ResearchDocument",
+    "Watchlist",
+    "WatchlistItem",
+    "IngestJob",
 ]

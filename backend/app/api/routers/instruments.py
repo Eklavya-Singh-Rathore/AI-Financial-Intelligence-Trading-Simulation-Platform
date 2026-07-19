@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import date
 from typing import Annotated
 
@@ -20,8 +21,9 @@ from app.schemas.market import (
     InstrumentSummaryOut,
     PriceBarOut,
     PriceSeriesOut,
+    UniverseSummaryOut,
 )
-from app.services import forecast_service, market_data, research
+from app.services import forecast_service, market_data, research, watchlists
 from app.services.indicators import SUPPORTED_INDICATORS, compute_indicators
 
 router = APIRouter(prefix="/instruments", tags=["instruments"])
@@ -35,13 +37,40 @@ async def list_instruments(
     return [InstrumentOut.model_validate(i) for i in instruments]
 
 
-@router.get("/summary", response_model=list[InstrumentSummaryOut])
+@router.get("/summary", response_model=UniverseSummaryOut)
 async def universe_summary(
+    auth: Annotated[AuthContext, Depends(get_auth)],
+    q: str | None = Query(default=None, max_length=64, description="Symbol/name search."),
+    types: str | None = Query(
+        default=None, description="Comma-separated instrument types (equity,index,etf,...)."
+    ),
+    watchlist_id: uuid.UUID | None = Query(default=None),
+    limit: int = Query(default=200, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     session: AsyncSession = Depends(get_session),
-) -> list[InstrumentSummaryOut]:
-    """Whole-universe dashboard payload in one call."""
-    rows = await market_data.universe_summary(session)
-    return [InstrumentSummaryOut.model_validate(r) for r in rows]
+) -> UniverseSummaryOut:
+    """Filterable, paged dashboard payload (Phase 6)."""
+    instrument_ids = None
+    if watchlist_id is not None:
+        try:
+            instrument_ids = await watchlists.watchlist_instrument_ids(
+                session, auth.user_id, watchlist_id
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+    type_list = [t.strip().lower() for t in types.split(",") if t.strip()] if types else None
+    data = await market_data.universe_summary(
+        session,
+        instrument_ids=instrument_ids,
+        q=q,
+        types=type_list,
+        limit=limit,
+        offset=offset,
+    )
+    return UniverseSummaryOut(
+        items=[InstrumentSummaryOut.model_validate(r) for r in data["items"]],
+        total=data["total"],
+    )
 
 
 async def _get_instrument_or_404(session: AsyncSession, symbol: str):

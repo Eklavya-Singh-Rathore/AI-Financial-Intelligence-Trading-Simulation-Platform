@@ -1,22 +1,26 @@
 # System Overview
 
 **AI Financial Intelligence Trading Simulation Platform** — a multi-user
-decision-support system (NO real trading) for a fixed 16-asset Indian-market
-universe. It ingests daily OHLCV, computes technical indicators, forecasts
-prices with the vendored **Kronos** foundation model, backtests strategies on
-**NautilusTrader**, runs a **7-agent LLM pipeline** producing risk-limited
-recommendations, **explains** them, lets users **paper-trade** them
-(human-in-the-loop), serves company **research** (profiles/financials/
-earnings), grounds chat in market data + persisted **news with citations**,
-and **evaluates** its own AI quality. Single-document reference:
+decision-support system (NO real trading) for the Indian market: a **curated
+Nifty-100 universe** (~100 instruments) that **lazy-loads the rest of NSE/BSE on
+demand** (India-only, ~300-instrument cap). It ingests daily OHLCV, computes
+technical indicators, forecasts prices with the vendored **Kronos** foundation
+model, backtests strategies on **NautilusTrader**, runs a **7-agent LLM
+pipeline** producing risk-limited recommendations, **explains** them, lets users
+**paper-trade** them (human-in-the-loop) with **portfolio analytics**
+(VaR/Monte-Carlo/optimization), serves company **research** (profiles/financials/
+earnings), grounds chat (full page + a site-wide floating dock) in market data +
+persisted **news with citations**, and **evaluates** its own AI quality. Phase 6
+adds a **professional UI** and **external data providers** (Finnhub + Alpha
+Vantage). Single-document reference:
 [../MASTER_ARCHITECTURE.md](../MASTER_ARCHITECTURE.md).
 
 ## Components
 
 | Component | Tech | Responsibility |
 |---|---|---|
-| Frontend | Next.js 15 (App Router, TS), Tailwind v4, TanStack Query, lightweight-charts | Dashboard, instrument detail (candles + forecast overlay + backtest + research), simulation (portfolio/orders/performance/intelligence), agent transcripts + explanations, insights (AI evaluation), chat with citations; auth UI; same-origin authenticated proxy to the backend |
-| Backend | FastAPI (async), SQLAlchemy 2 + asyncpg, APScheduler | REST APIs, auth/RBAC, forecasting/backtesting orchestration, agent pipeline + explainability, paper-trading engine, financial research, news RAG, AI evaluation, scheduler |
+| Frontend | Next.js 15 (App Router, TS), Tailwind v4 design tokens + `components/ui/*`, TanStack Query, lightweight-charts | Watchlist-aware dashboard, instrument detail (professional `TradingChart` + forecast + backtest + research), Portfolio analytics, simulation, agent transcripts + explanations, insights, chat with citations, site-wide floating assistant, Cmd/Ctrl-K command palette; auth UI; same-origin authenticated proxy to the backend |
+| Backend | FastAPI (async), SQLAlchemy 2 + asyncpg, APScheduler | REST APIs, auth/RBAC, forecasting/backtesting orchestration, agent pipeline + explainability, paper-trading engine, portfolio analytics, financial research, news RAG, AI evaluation, catalog sync + whole-market lazy load (durable `ingest_jobs` queue), external-data providers, scheduler |
 | Inference | Hugging Face Space (Gradio/ZeroGPU), official Kronos + MiniLM | `POST /forecast`, `POST /embed`, `GET /health` — CPU inference so the backend image ships without torch |
 | Database | Supabase Postgres 17 + pgvector | Market data, forecasts/backtests/agent runs/chat (per-user owned), 384-d embeddings |
 | Auth | Supabase Auth (email+password, open sign-up, guest) | JWT issuance; backend verifies JWTs (local HS256 or remote) |
@@ -67,7 +71,10 @@ The same shape applies to backtests (NautilusTrader in-process), agent runs
 
 ## Non-goals
 
-Real trading/order execution; notifications (permanently out of scope); a
-durable job queue (future); document uploads for RAG (news-only corpus in
-Phase 5, owner decision); multi-tenant RLS policies (all data access is
-mediated by the backend, which enforces ownership in application code).
+Real trading/order execution; notifications (permanently out of scope);
+document uploads for RAG (news-only corpus, owner decision); multi-tenant RLS
+policies (all data access is mediated by the backend, which enforces ownership
+in application code). Deferred in Phase 6 (abstractions ready): streaming
+assistant responses; Reddit/Twitter-X sentiment + OpenBB providers; correlated
+Monte-Carlo; the official TradingView Charting Library. (The durable job queue,
+formerly future work, shipped in Phase 6 as `ingest_jobs`.)

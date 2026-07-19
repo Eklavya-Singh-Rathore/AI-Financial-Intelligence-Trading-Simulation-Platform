@@ -56,6 +56,23 @@ async def _run_ingest_background(body: IngestRequest) -> None:
         _ingest_active = False
 
 
+def start_background_ingest(
+    background_tasks: BackgroundTasks, *, symbols: list[str] | None, days: int
+) -> bool:
+    """Queue a background ingest honoring the process-wide mutex.
+
+    Shared with the admin catalog-sync backfill (Phase 6). Returns False when
+    an ingest is already running (caller decides whether that's a 409 or a
+    soft skip).
+    """
+    global _ingest_active
+    if _ingest_active:
+        return False
+    _ingest_active = True
+    background_tasks.add_task(_run_ingest_background, IngestRequest(symbols=symbols, days=days))
+    return True
+
+
 @router.post("/run", response_model=IngestSummaryOut)
 async def run_ingest(
     background_tasks: BackgroundTasks,

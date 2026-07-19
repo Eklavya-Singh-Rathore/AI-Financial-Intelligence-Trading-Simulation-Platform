@@ -1,25 +1,33 @@
 # project_handover.md
 
 > **Single source of truth for resuming development** — self-contained; no prior
-> conversations needed. Last updated: **2026-07-17, Phase 5 SHIPPED**
-> (paper trading, research, news RAG, explainability, evaluation — merged to
-> `main`, CI green, deployed, production-verified).
+> conversations needed. Last updated: **2026-07-19, Phase 6 development complete
+> on branch `claude/phase-6-professional-trading`** (professional UI redesign,
+> TradingView-grade charting, market expansion, portfolio analytics, floating
+> assistant, Finnhub + Alpha Vantage providers). **Ship pending** — not yet
+> merged to `main` or deployed; the final gates → merge → deploy → production
+> verification is the last step (§6–8). Phase 5 remains live in production.
 
 ## 1. What this is
 
 **AI Financial Intelligence Trading Simulation Platform** — multi-user
-decision-support (NO real trading) for a fixed 16-asset Indian-market universe
-(NIFTY 50, Sensex, gold/silver ETFs, 12 NSE blue-chips). Ingests daily OHLCV,
-computes indicators, forecasts with the vendored **Kronos** foundation model,
-backtests on **NautilusTrader**, runs a 7-agent LLM pipeline (Gemini) producing
-risk-limited recommendations, **explains** those recommendations, lets users
-**paper-trade** them (human-in-the-loop — AI never auto-executes), serves
-company **research** (profiles/statements/earnings), grounds chat in market
-data + a persisted **news corpus with citations**, and **evaluates** its own
-AI quality (`/insights`).
+decision-support (NO real trading) for the Indian market: a **curated Nifty-100
+universe** (~100 instruments) that **lazy-loads the rest of NSE/BSE on demand**
+(India-only, ~300-instrument cap). Ingests daily OHLCV, computes indicators,
+forecasts with the vendored **Kronos** foundation model, backtests on
+**NautilusTrader**, runs a 7-agent LLM pipeline (Gemini) producing risk-limited
+recommendations, **explains** those recommendations, lets users **paper-trade**
+them (human-in-the-loop — AI never auto-executes), computes **portfolio
+analytics** (VaR / Monte-Carlo / optimization), serves company **research**
+(profiles/statements/earnings), grounds chat — a full page **and** a site-wide
+floating dock — in market data + a persisted **news corpus with citations**,
+and **evaluates** its own AI quality (`/insights`). Phase 6 layers on a
+**professional UI** (design tokens + component library, TradingView-grade
+charting) and **external data providers** (Finnhub + Alpha Vantage).
 
 - Repo: https://github.com/Eklavya-Singh-Rathore/AI-Financial-Intelligence-Trading-Simulation-Platform
-  — `main` at **`bb99901`** (Phase 5 merge), everything pushed, no open PRs.
+  — `main` at **`bb99901`** (Phase 5 merge, still the deployed code). Phase 6 is
+  on branch **`claude/phase-6-professional-trading`** (pushed, not yet merged).
 - DB/Auth: Supabase **`ai-stock-prediction`** (`rekoawsoghrjcimknkfz`, ap-south-1, PG 17)
 - **Live** (§7): Vercel frontend · Render backend · HF inference Space · Supabase —
   all serving the Phase 5 code.
@@ -27,11 +35,12 @@ AI quality (`/insights`).
   (7 docs), `docs/adr/` (ADR-0001..0006), `docs/deploy-render.md`,
   `docs/deploy-hf-space.md`, `docs/environment.md`, `README.md`.
 - **Notifications are permanently out of scope** (owner decision, Phase 4).
-- The Phase 5 work branch `claude/phase-4-5-deployment-migration-ea8b0e` (in a
-  worktree under `.claude/worktrees/`) is fully merged into `main` and can be
-  deleted along with its worktree.
+- The Phase 5 work branch `claude/phase-4-5-deployment-migration-ea8b0e` is
+  fully merged into `main`. Phase 6 work continues in a worktree on branch
+  `claude/phase-6-professional-trading` (under `.claude/worktrees/`); both old
+  worktrees can be deleted after the Phase 6 ship.
 
-## 2. Phase history (all merged on `main`)
+## 2. Phase history (all merged on `main` except Phase 6, ship pending)
 
 | Phase | Delivered |
 |---|---|
@@ -44,17 +53,21 @@ AI quality (`/insights`).
 | 4.5 | **Deployment migration**: remote Kronos/MiniLM via private HF Space, `space_client`, mode toggles, slim torch-free Render image, keepalive; production-verified |
 | 4.6 | **Stabilization**: full E2E verification, **Guest Login**, 2 bug fixes, DB hardening (migration 0010), architecture docs (7) + ADRs (5) |
 | 5 | **Intelligence, research & paper trading** (2026-07-17): paper-trading engine + `/simulation` (API+UI), financial research (profiles/statements/earnings), news RAG + chat citations, explainability (+`context_snapshot`), portfolio intelligence, AI evaluation + `/insights`, `docs/MASTER_ARCHITECTURE.md` + ADR-0006, migrations 0011–0013 |
+| 6 *(pending)* | **Professional trading experience & market expansion**: Kronos audit; watchlists (migration 0014); paginated/searchable `/instruments/summary`; curated Nifty-100 catalog + idempotent admin sync + backfill; external-provider abstraction (Finnhub + Alpha Vantage); whole-market lazy load + durable `ingest_jobs` queue (migration 0015); numpy-only portfolio analytics (VaR/Monte-Carlo/optimization); frontend design system + `components/ui/*`; professional `TradingChart`; redesigned dashboard/Portfolio/Simulation; command palette; site-wide floating assistant; design-system polish pass; proxy 204 fix |
 
 ## 3. Architecture
 
-`api/routers → services → (ml | backtesting | llm | agents) → models/db`
-(async SQLAlchemy → Supabase). Registries select implementations; heavy work
-runs off the event loop. Inference modes: `KRONOS_MODE`/`EMBEDDINGS_MODE` =
-`local` (dev) or `remote` (HF Space, production). Frontend (Next.js 15) reaches
-the backend only via the authenticated same-origin proxy
+`api/routers → services → (ml | backtesting | llm | agents | providers) →
+models/db` (async SQLAlchemy → Supabase). Registries select implementations;
+heavy work runs off the event loop. Inference modes: `KRONOS_MODE`/
+`EMBEDDINGS_MODE` = `local` (dev) or `remote` (HF Space, production). Frontend
+(Next.js 15) reaches the backend only via the authenticated same-origin proxy
 `app/api/backend/[...path]`. Phase 5 services: `simulation` (paper-trading
-engine), `research` (yfinance fundamentals, TTL cache), `news_rag` (embedded
-news corpus + KNN), `evaluation` (AI quality/cost). **Complete reference:
+engine), `research`, `news_rag`, `evaluation`. Phase 6 services:
+`instrument_admin` (catalog sync), `market_expansion` (lazy-load + queue drain),
+`portfolio_analytics` (numpy-only VaR/Monte-Carlo/optimization); the
+`app/providers/` package is a capability-based external-data abstraction
+(yfinance/Finnhub/Alpha Vantage, degrade-to-empty). **Complete reference:
 `docs/MASTER_ARCHITECTURE.md`.**
 
 Key Phase 5 design points (ADR-0006): daily-bar order semantics (market at
@@ -77,12 +90,14 @@ portfolio per owner, and **AI proposals are structural human-in-the-loop**
 
 ## 5. Database
 
-Alembic head on Supabase: **`0013_run_context`** (applied; `alembic current`
-verified). Owned: `forecasts`, `backtests`, `agent_runs`
-(+`context_snapshot`), `agent_messages`, `chat_sessions`, `chat_messages`,
-`sim_portfolios`, `sim_orders`, `sim_trades`, `sim_positions`,
-`instrument_fundamentals`, `research_documents`. Adopted: `instruments` (16,
-incl. `sector_id`/`industry_id` mapped on the ORM), `price_bars`,
+Alembic head on Supabase: **`0013_run_context`** — Phase 6 adds
+**`0014_watchlists`** and **`0015_ingest_jobs`** (applied to the branch's DB
+during development; production upgrade happens at ship, §6–8). Owned:
+`forecasts`, `backtests`, `agent_runs` (+`context_snapshot`), `agent_messages`,
+`chat_sessions`, `chat_messages`, `sim_portfolios`, `sim_orders`, `sim_trades`,
+`sim_positions`, `instrument_fundamentals`, `research_documents`, `watchlists`,
+`watchlist_items`, `ingest_jobs`. Adopted: `instruments` (curated Nifty-100 +
+on-demand, incl. `sector_id`/`industry_id` mapped on the ORM), `price_bars`,
 `data_providers`, `instrument_provider_mappings`, `exchanges`, warehouse
 tables, `agent_embeddings`. **RLS deny-by-default everywhere** (backend
 connects as `postgres`, ownership in app code). Migrations manual
@@ -153,6 +168,11 @@ Users → Vercel frontend → Render backend (slim, no torch) → Supabase
    `NEWSAPI_KEY`; regenerate `API_KEY`; the **Render API key** and **HF write
    token** (replace HF with a fine-grained **read** token on the Space).
    The Render API key was used again this phase (deploy trigger + status).
+   **Phase 6:** `FINNHUB_API_KEY` and `ALPHA_VANTAGE_API_KEY` were supplied
+   during development and live only in the local git-ignored `.env` (never
+   committed — `render.yaml` carries placeholders with `sync: false`). Set the
+   real values as **Render production secrets** at ship if the provider
+   integrations are wanted; treat the dev values as compromised and rotate.
 2. Create least-privilege DB role `app_rw` to replace the `postgres` app
    connection — SQL in `docs/deploy-render.md`.
 3. Enable Supabase **leaked-password protection**; consider requiring email
@@ -163,14 +183,19 @@ Users → Vercel frontend → Render backend (slim, no torch) → Supabase
    `claude/phase-4-5-deployment-migration-ea8b0e` + its worktree; regenerate
    `scripts/base_schema.sql` if a fresh-DB bootstrap is wanted.
 
-## 9. Future / beyond Phase 5
+## 9. Future / beyond Phase 6
 
-Durable job queue replacing `BackgroundTasks` (durable + scheduled autonomous
-runs) · per-user LLM quotas · prompt registry/versioning · RAG document
-uploads (filings/transcripts — `research_documents.doc_type` is ready for it)
-· forecast persistence from the UI (frontend currently calls
-`persist=false`, so `/insights` forecast accuracy only accrues from
-API/backfill usage) · agent-quality evaluation harness beyond
-`/evaluation/summary` · additional data APIs (Twitter/X — the production
-Vercel URL is the OAuth callback base) · multi-tenant RLS policies if SaaS is
-pursued. *(Notifications: permanently removed.)*
+**Deferred in Phase 6, abstractions ready:** streaming assistant responses
+(needs backend SSE + proxy passthrough) · Reddit / Twitter-X sentiment and
+OpenBB providers (add a `BaseProvider` subclass + key + `PROVIDER_PRIORITY`
+entry) · correlated (covariance-based) Monte-Carlo (current model is per-asset
+GBM) · the official TradingView Charting Library (current charts use
+lightweight-charts; no license was available — swap-in path documented).
+
+**Longer-term:** per-user LLM quotas · prompt registry/versioning · RAG
+document uploads (filings/transcripts — `research_documents.doc_type` is ready)
+· forecast persistence from the UI (frontend calls `persist=false`, so
+`/insights` accuracy only accrues from API/backfill usage) · agent-quality
+evaluation harness beyond `/evaluation/summary` · multi-tenant RLS policies if
+SaaS is pursued. *(Notifications: permanently removed. The durable job queue —
+formerly future work — shipped in Phase 6 as `ingest_jobs`.)*

@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.routers import (
+    admin,
     agents,
     backtest,
     chat,
@@ -21,7 +22,9 @@ from app.api.routers import (
     health,
     ingest,
     instruments,
+    market,
     simulation,
+    watchlists,
 )
 from app.core.auth import get_auth, warn_if_user_auth_disabled
 from app.core.config import get_settings
@@ -94,6 +97,9 @@ _PROTECTED = [
     chat.router,
     simulation.router,
     evaluation.router,
+    watchlists.router,
+    admin.router,
+    market.router,
 ]
 _auth = [Depends(get_auth)]
 for router in _PROTECTED:

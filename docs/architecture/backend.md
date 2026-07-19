@@ -3,7 +3,7 @@
 FastAPI (async) application under `backend/app/`. Layering:
 
 ```
-api/routers  ─▶  services  ─▶  (ml | backtesting | llm | agents)  ─▶  models / db
+api/routers  ─▶  services  ─▶  (ml | backtesting | llm | agents | providers)  ─▶  models / db
 ```
 
 Routers stay thin; business logic lives in `services`; heavy/CPU work runs off
@@ -17,14 +17,16 @@ is a config change.
 |---|---|
 | `app/main.py` | App factory, lifespan (logging, orphan-run sweep, scheduler), CORS, router mounting at `/` and `/api/v1`, `/metrics` |
 | `app/core/` | `config.py` (pydantic-settings), `auth.py` (JWT/API-key → `AuthContext`), logging, domain constants |
-| `app/api/routers/` | `health`, `instruments` (prices/indicators/forecast/profile/financials/earnings), `ingest`, `backtest`, `agents` (+explanation), `chat`, `simulation`, `evaluation` |
-| `app/services/` | `market_data`, `data_ingest`, `indicators`, `forecast_service`, `backtest_service`, `news`, `embeddings`, `space_client`, `chat_service`, `simulation` (paper-trading engine), `research` (fundamentals), `news_rag` (news corpus + retrieval), `evaluation` (AI quality/cost) |
+| `app/api/routers/` | `health`, `instruments` (prices/indicators/forecast/profile/financials/earnings/summary), `ingest`, `backtest`, `agents` (+explanation), `chat`, `simulation` (+analytics), `evaluation`, `watchlists`, `market`, `admin` (Phase 6) |
+| `app/services/` | `market_data`, `data_ingest`, `indicators`, `forecast_service`, `backtest_service`, `news`, `embeddings`, `space_client`, `chat_service`, `simulation` (paper-trading engine), `research` (fundamentals), `news_rag` (news corpus + retrieval), `evaluation` (AI quality/cost), `watchlists`, `instrument_admin` (catalog sync), `market_expansion` (lazy-load + queue drain), `portfolio_analytics` (numpy-only VaR/Monte-Carlo/optimization) |
+| `app/catalog/` | curated Nifty-100 universe — `CatalogEntry` frozen dataclass + `CURATED_UNIVERSE` tuple (Phase 6) |
+| `app/providers/` | external-data abstraction: `BaseProvider` (capability set, never-raise methods) + `registry` (ordered by `PROVIDER_PRIORITY`) + `yfinance`, `finnhub`, `alpha_vantage`, `newsapi` (Phase 6) |
 | `app/ml/` | `Forecaster` interface + `registry`; `baseline`, `kronos` (local), `remote_kronos` (Space); vendored `kronos_src/` (MIT) |
 | `app/backtesting/` | `Backtester` interface + registry; NautilusTrader + a simple vectorized engine; SMA-crossover strategy |
 | `app/llm/` | `LLMClient` + failover registry; Gemini / OpenAI / fake clients |
 | `app/agents/` | 7-agent orchestrator, prompts, risk limits, `explain.py` (deterministic explanation composition) — see [ai-agents.md](ai-agents.md) |
 | `app/models/`, `app/db/` | Async SQLAlchemy ORM + engine/session |
-| `app/scheduler/` | APScheduler jobs (daily ingest; sim order sweep; news ingest; inference-Space keep-warm) — single-flight via Postgres advisory locks |
+| `app/scheduler/` | APScheduler jobs (daily ingest; sim order sweep; news ingest; ingest-job drain; inference-Space keep-warm) — single-flight via Postgres advisory locks |
 
 ## Registries (the extension seam)
 
@@ -75,14 +77,18 @@ inference client (`app/services/space_client.py`) follows the same pattern.
 
 | Endpoint | Notes |
 |---|---|
-| `GET /live`, `GET /health` | open; health reports DB + `kronos_mode`/`embeddings_mode` |
-| `GET /instruments`, `/instruments/summary` | the 16-asset universe |
+| `GET /live`, `GET /health` | open; health reports DB + `kronos_mode`/`embeddings_mode` + model ids + remote-inference status |
+| `GET /instruments` · `/instruments/summary` | the tracked universe; `summary` is paginated/searchable (`q`, `types`, `watchlist_id`, `limit`, `offset`) → `{items, total}` |
 | `GET /instruments/{s}/prices` `/indicators` `/forecast` | forecast: `horizon` (1–60), `model` (`kronos`/`baseline`), `persist` |
 | `POST /backtest` | SMA-crossover, `nautilus`/`simple` engine |
 | `POST /agents/run` → `202` | fire-and-poll; `GET /agents/runs/{id}` + `/messages` + `/explanation` |
 | `POST /chat/sessions`, `POST /chat/sessions/{id}/messages` | RAG-grounded chat with news citations |
-| `GET /instruments/{s}/profile` `/financials` `/earnings` | yfinance fundamentals, TTL-cached, degrade-to-DB |
-| `GET/POST /simulation/*` | portfolio, orders (market/limit/stop), trades, performance, intelligence, AI proposals (accept/reject) |
+| `GET /instruments/{s}/profile` `/financials` `/earnings` | yfinance/Alpha Vantage fundamentals, TTL-cached, degrade-to-DB |
+| `GET/POST /simulation/*` | portfolio, orders (market/limit/stop), trades, performance, intelligence, AI proposals |
+| `GET /simulation/analytics/{risk,montecarlo,optimization}` | portfolio analytics — VaR, Monte-Carlo GBM, mean-variance frontier (Phase 6) |
+| `GET/POST/PATCH/DELETE /watchlists/*` | per-user watchlists CRUD (Phase 6) |
+| `GET /market/search` · `POST /market/track` · `GET /market/track/{s}/status` | whole-market lazy load: search → track → durable queue (Phase 6) |
+| `GET /admin/catalog` · `POST /admin/catalog/sync` | curated-catalog plan + idempotent sync (privileged; Phase 6) |
 | `GET /evaluation/summary` | forecast accuracy, agent stats, recommendation success, usage & cost |
 
 Every business route depends on `get_auth`; routes are dual-mounted at `/` and

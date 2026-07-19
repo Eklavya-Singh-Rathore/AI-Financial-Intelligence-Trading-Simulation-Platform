@@ -130,7 +130,8 @@ async def news_ingest_job() -> None:
     depend on agent runs happening. Also purges documents older than the
     retention window. Advisory-locked; every failure is per-symbol best-effort.
     """
-    from app.services import market_data, news, news_rag
+    from app.providers import registry as provider_registry
+    from app.services import market_data, news_rag
 
     engine = get_engine()
     async with engine.connect() as lock_conn:
@@ -143,24 +144,79 @@ async def news_ingest_job() -> None:
             log.info("news_ingest_skipped", reason="another instance holds the lock")
             return
         try:
+            from sqlalchemy import select as sa_select
+
+            from app.models.instrument import Instrument
+            from app.models.simulation import SimPosition
+            from app.models.watchlist import WatchlistItem
+
             sm = get_sessionmaker()
             async with sm() as session:
                 instruments = await market_data.list_instruments(session)
+                # Quota guard (Phase 6): held + watchlisted symbols first, the
+                # rest on a deterministic daily rotation, capped.
+                held = set(
+                    (
+                        await session.execute(
+                            sa_select(Instrument.symbol).join(
+                                SimPosition, SimPosition.instrument_id == Instrument.id
+                            )
+                        )
+                    ).scalars()
+                )
+                watched = set(
+                    (
+                        await session.execute(
+                            sa_select(Instrument.symbol).join(
+                                WatchlistItem, WatchlistItem.instrument_id == Instrument.id
+                            )
+                        )
+                    ).scalars()
+                )
+                chosen = news_rag.select_news_symbols(
+                    [i.symbol for i in instruments],
+                    held,
+                    watched,
+                    get_settings().news_ingest_daily_cap,
+                    datetime.now(UTC).timetuple().tm_yday,
+                )
+                # Provider symbols (yfinance ticker) for the Finnhub news path.
+                provider = await market_data.get_yfinance_provider(session)
+                psym_map = await market_data.get_provider_symbol_map(session, provider.id)
+                by_symbol = {i.symbol: i for i in instruments}
                 added = 0
-                for inst in instruments:
-                    headlines = await asyncio.to_thread(
-                        news.fetch_headlines, f'"{inst.display_name}"'
+                for symbol in chosen:
+                    inst = by_symbol[symbol]
+                    # NewsAPI reads the display name (free text); Finnhub reads
+                    # the provider ticker. Merged + deduped by the registry.
+                    items = await asyncio.to_thread(
+                        provider_registry.fetch_news,
+                        f'"{inst.display_name}"',
+                        symbol=psym_map.get(inst.id),
                     )
-                    added += await news_rag.ingest_headlines(session, inst.symbol, headlines)
+                    added += await news_rag.ingest_headlines(session, inst.symbol, items)
                 purged = await news_rag.purge_old_news(session)
-            log.info("news_ingest_finished", instruments=len(instruments), added=added,
-                     purged=purged)
+            log.info("news_ingest_finished", universe=len(instruments),
+                     requested=len(chosen), added=added, purged=purged)
         except Exception as exc:  # noqa: BLE001 - a failed job must not kill the app
             log.error("news_ingest_failed", error=str(exc), exc_info=True)
         finally:
             await lock_conn.execute(
                 text("SELECT pg_advisory_unlock(:key)"), {"key": NEWS_INGEST_LOCK_KEY}
             )
+
+
+async def ingest_job_drain_job() -> None:
+    """Drain queued whole-market backfills (Phase 6). Advisory-locked inside
+    the service; a failed drain must not kill the app."""
+    from app.services import market_expansion
+
+    try:
+        sm = get_sessionmaker()
+        async with sm() as session:
+            await market_expansion.drain_ingest_jobs(session)
+    except Exception as exc:  # noqa: BLE001 - a failed job must not kill the app
+        log.error("ingest_job_drain_failed", error=str(exc), exc_info=True)
 
 
 async def space_keepalive_job() -> None:
@@ -228,6 +284,14 @@ def start_scheduler() -> AsyncIOScheduler | None:
             replace_existing=True,
             misfire_grace_time=3600,
         )
+    # Drain whole-market backfill jobs every 5 min (Phase 6).
+    scheduler.add_job(
+        ingest_job_drain_job,
+        IntervalTrigger(minutes=5),
+        id="ingest_job_drain",
+        replace_existing=True,
+        misfire_grace_time=300,
+    )
     if _remote_inference_configured(settings):
         scheduler.add_job(
             space_keepalive_job,

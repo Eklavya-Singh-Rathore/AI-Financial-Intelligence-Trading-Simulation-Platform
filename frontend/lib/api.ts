@@ -12,6 +12,30 @@ export type InstrumentSummary = {
   sparkline: number[];
 };
 
+export type UniverseSummary = { items: InstrumentSummary[]; total: number };
+
+export type Watchlist = {
+  id: string; name: string; created_at: string; symbols: string[];
+};
+
+export type MarketSearchResult = {
+  provider_symbol: string; name: string; exchange: string | null;
+  asset_type: string | null; already_tracked: boolean;
+};
+
+export type TrackResult = {
+  symbol: string; provider_symbol: string; created: boolean; job_queued: boolean;
+};
+
+export type TrackStatus = {
+  symbol: string; status: string; bars: number;
+  first_date: string | null; last_date: string | null; error: string | null;
+};
+
+export type SummaryParams = {
+  q?: string; types?: string; watchlist_id?: string; limit?: number; offset?: number;
+};
+
 export type PriceBar = {
   date: string; open: number; high: number; low: number; close: number;
   adj_close: number | null; volume: number;
@@ -116,6 +140,32 @@ export type OrderCreate = {
   qty: number; limit_price?: number; stop_price?: number;
 };
 
+// --- Portfolio analytics (Phase 6) ------------------------------------------
+
+type Unavailable = { available: false; reason: string };
+
+export type RiskAnalytics = { available: true; equity: number; horizon_days: number;
+  annual_vol_pct: number;
+  confidence: Record<string, {
+    historical: { var_pct: number | null; cvar_pct: number | null };
+    parametric: { var_pct: number | null };
+    var_amount: number;
+  }>;
+} | Unavailable;
+
+export type MonteCarloAnalytics = { available: true; equity0: number; horizon_days: number;
+  n_paths: number; prob_loss: number;
+  bands: { day: number; p5: number; p25: number; p50: number; p75: number; p95: number }[];
+  terminal: { median: number; mean: number; p5: number; p95: number };
+} | Unavailable;
+
+export type OptimizationAnalytics = { available: true; assets: string[];
+  frontier: { risk: number; return: number }[];
+  max_sharpe: { weights: { symbol: string; weight: number }[]; return_pct: number; risk_pct: number; sharpe: number };
+  min_vol: { weights: { symbol: string; weight: number }[]; return_pct: number; risk_pct: number };
+  current: { symbol: string; weight: number }[];
+} | Unavailable;
+
 export type EvaluationSummary = {
   forecast_accuracy: {
     models: Record<string, { evaluated_points: number; mape_pct: number; bias_pct: number }>;
@@ -214,7 +264,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   health: () => request<{ status: string; database: string }>("health"),
-  summary: () => request<InstrumentSummary[]>("instruments/summary"),
+  summary: (params?: SummaryParams) => {
+    const qs = new URLSearchParams();
+    if (params?.q) qs.set("q", params.q);
+    if (params?.types) qs.set("types", params.types);
+    if (params?.watchlist_id) qs.set("watchlist_id", params.watchlist_id);
+    if (params?.limit !== undefined) qs.set("limit", String(params.limit));
+    if (params?.offset) qs.set("offset", String(params.offset));
+    const suffix = qs.size ? `?${qs}` : "";
+    return request<UniverseSummary>(`instruments/summary${suffix}`);
+  },
   prices: (symbol: string, limit = 400) =>
     request<{ symbol: string; bars: PriceBar[] }>(
       `instruments/${encodeURIComponent(symbol)}/prices?limit=${limit}`,
@@ -256,10 +315,37 @@ export const api = {
   simTrades: () => request<SimTrade[]>("simulation/trades"),
   simPerformance: () => request<SimPerformance>("simulation/performance"),
   simIntelligence: () => request<SimIntelligence>("simulation/intelligence"),
+  simAnalyticsRisk: (horizonDays = 1) =>
+    request<RiskAnalytics>(`simulation/analytics/risk?horizon_days=${horizonDays}`),
+  simAnalyticsMonteCarlo: (horizonDays = 252) =>
+    request<MonteCarloAnalytics>(`simulation/analytics/montecarlo?horizon_days=${horizonDays}`),
+  simAnalyticsOptimization: () =>
+    request<OptimizationAnalytics>("simulation/analytics/optimization"),
   simPropose: (agentRunId: string) =>
     request<SimOrder>("simulation/proposals", {
       method: "POST",
       body: JSON.stringify({ agent_run_id: agentRunId }),
+    }),
+  marketSearch: (q: string) =>
+    request<{ results: MarketSearchResult[] }>(`market/search?q=${encodeURIComponent(q)}`),
+  marketTrack: (symbol: string) =>
+    request<TrackResult>("market/track", { method: "POST", body: JSON.stringify({ symbol }) }),
+  trackStatus: (symbol: string) =>
+    request<TrackStatus>(`market/track/${encodeURIComponent(symbol)}/status`),
+  watchlists: () => request<Watchlist[]>("watchlists"),
+  createWatchlist: (name: string) =>
+    request<Watchlist>("watchlists", { method: "POST", body: JSON.stringify({ name }) }),
+  renameWatchlist: (id: string, name: string) =>
+    request<Watchlist>(`watchlists/${id}`, { method: "PATCH", body: JSON.stringify({ name }) }),
+  deleteWatchlist: (id: string) => request<void>(`watchlists/${id}`, { method: "DELETE" }),
+  addWatchlistItem: (id: string, symbol: string) =>
+    request<Watchlist>(`watchlists/${id}/items`, {
+      method: "POST",
+      body: JSON.stringify({ symbol }),
+    }),
+  removeWatchlistItem: (id: string, symbol: string) =>
+    request<Watchlist>(`watchlists/${id}/items/${encodeURIComponent(symbol)}`, {
+      method: "DELETE",
     }),
   profile: (symbol: string) =>
     request<CompanyProfile>(`instruments/${encodeURIComponent(symbol)}/profile`),

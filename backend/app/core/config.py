@@ -100,6 +100,15 @@ class Settings(BaseSettings):
     news_lookback_days: int = 7
     news_max_headlines: int = 12
 
+    # --- Data providers (Phase 6, all optional; each degrades when keyless) ---
+    finnhub_api_key: str | None = None
+    alpha_vantage_api_key: str | None = None
+    alpha_vantage_daily_cap: int = 20  # free tier hard limit is 25/day
+    # Aggregate ordering by provider code (first available wins per capability).
+    provider_priority: str = "yfinance,finnhub,alpha_vantage,newsapi"
+    # Whole-market lazy loading: hard cap on total tracked instruments.
+    max_tracked_instruments: int = 300
+
     # --- Agents (Phase 2) ---
     agents_debate_rounds: int = 1
     max_position_pct: float = 10.0
@@ -120,6 +129,9 @@ class Settings(BaseSettings):
     enable_news_ingest: bool = True  # daily scheduler job persisting news into RAG
     news_rag_top_k: int = 5  # news headlines retrieved per chat message
     news_retention_days: int = 180  # news documents older than this are purged
+    # Phase 6 market expansion: keep free-tier quotas honest at ~100 instruments.
+    news_ingest_daily_cap: int = 60  # max NewsAPI requests per daily news job
+    ingest_pause_seconds: float = 0.3  # sleep between per-instrument OHLCV fetches
     # Cost estimation only (per 1M tokens, USD) - configurable per provider price list.
     llm_cost_input_per_1m: float = 0.30
     llm_cost_output_per_1m: float = 2.50

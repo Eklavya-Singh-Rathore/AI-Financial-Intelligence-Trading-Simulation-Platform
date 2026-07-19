@@ -1,18 +1,23 @@
 # Master Architecture
 
 **AI Financial Intelligence Trading Simulation Platform** — the complete
-system reference as of Phase 5. One document, top to bottom; per-area deep
+system reference as of Phase 6. One document, top to bottom; per-area deep
 dives live in [`docs/architecture/`](architecture/) and decisions in
 [`docs/adr/`](adr/).
 
-A multi-user **decision-support** system (NO real trading) for a fixed
-16-asset Indian-market universe (NIFTY 50, Sensex, gold/silver ETFs, 12 NSE
-blue-chips). It ingests daily OHLCV, computes indicators, forecasts prices
-with the vendored **Kronos** foundation model, backtests on
-**NautilusTrader**, runs a **7-agent LLM pipeline** producing risk-limited
-recommendations, explains those recommendations, lets users **paper-trade**
-them (human-in-the-loop, never auto-executed), grounds a chat assistant in
-market data + persisted news with citations, and measures its own AI quality.
+A multi-user **decision-support** system (NO real trading) for the Indian
+market: a **curated Nifty-100 universe** (~100 instruments) that **lazy-loads
+the rest of the NSE/BSE market on demand** (India-only, ~300-instrument cap).
+It ingests daily OHLCV, computes indicators, forecasts prices with the vendored
+**Kronos** foundation model, backtests on **NautilusTrader**, runs a **7-agent
+LLM pipeline** producing risk-limited recommendations, explains those
+recommendations, lets users **paper-trade** them (human-in-the-loop, never
+auto-executed), computes **portfolio analytics** (VaR / Monte-Carlo /
+optimization), grounds a chat assistant (full page + a site-wide floating dock)
+in market data + persisted news with citations, and measures its own AI
+quality. Phase 6 also brings a **professional UI redesign** (design tokens +
+component library, TradingView-grade charting) and **external data providers**
+(Finnhub + Alpha Vantage behind a capability abstraction).
 
 ## 1. Production topology
 
@@ -77,7 +82,41 @@ registry maps `kronos` to in-process torch (`KRONOS_MODE=local`, dev) or the
 HF Space (`remote`, production) — same public name, same persisted
 `model_name`. Failures normalize to `ForecasterError` → HTTP 503; agent runs
 fall back to `baseline`. Forecasts persist per point (`forecasts` table) with
-owner stamping.
+owner stamping. Kronos is the default forecaster (`DEFAULT_FORECASTER=kronos`)
+and, as of Phase 6, is shown by default on the instrument chart.
+
+#### Kronos model audit (Phase 6)
+
+The platform uses the **official Kronos** foundation model (github.com/shiyu-coder/Kronos,
+MIT), vendored at `backend/app/ml/kronos_src/` for local inference and mirrored
+byte-identically at `infrastructure/hf-space/kronos_src/` for the Space (a CI
+`diff -r` drift check enforces this). The vendored `Kronos`/`KronosTokenizer`
+are generic `PyTorchModelHubMixin` classes — every hyperparameter (d_model,
+layers, heads, context) comes from the loaded Hub checkpoint's config, so the
+**deployed variant is entirely determined by the configured model id**, not by
+code.
+
+| Variant | Params | Context | Deployed? |
+|---|---|---|---|
+| Kronos-mini | ~4.1M | 2048 | no |
+| **Kronos-small** | **~24.7M** | **512** | **yes (local + remote)** |
+| Kronos-base | ~102.3M | 512 | no |
+
+Configured ids (identical in both modes): forecaster
+`KRONOS_MODEL_ID=NeoQuasar/Kronos-small`, tokenizer
+`KRONOS_TOKENIZER_ID=NeoQuasar/Kronos-Tokenizer-base`, `KRONOS_MAX_CONTEXT=512`,
+`KRONOS_DEVICE=cpu`. Set in `backend/app/core/config.py` (local defaults) and as
+Space env vars in `infrastructure/hf-space/app.py`; production runs
+`KRONOS_MODE=remote` (Render slim image ships without torch).
+
+**Live verification.** Backend `GET /health` reports the configured ids
+(`kronos_model_id`, `kronos_tokenizer_id`, `kronos_max_context`,
+`default_forecaster`) and, in remote mode, a `remote_inference` block echoing
+what the Space last reported loaded (populated from the 6-hourly keepalive
+ping's cached `/health` — never a blocking request). Cross-check directly
+against the Space's own `GET /health` (`kronos_model_id`, `embedding_model_id`,
+`device`, `app_version`). A forecast response's `meta.model_id` is a third
+confirmation. Embeddings use `all-MiniLM-L6-v2` (384-d), same local/remote split.
 
 ### 3.3 Backtesting (Phase 1)
 
@@ -165,23 +204,74 @@ from snapshot entry price vs latest close), and **usage & cost** (token
 totals, estimated USD via `LLM_COST_INPUT_PER_1M`/`LLM_COST_OUTPUT_PER_1M`,
 run wall time, per-step latency). UI: `/insights`.
 
+### 3.9 Market expansion & catalog (Phase 6)
+
+The universe grows in three tiers. **Curated catalog** — `app/catalog/curated.py`
+holds a `CatalogEntry` tuple (~100 Nifty-100 names); `POST /admin/catalog/sync`
+(privileged) idempotently creates any missing instruments + provider mappings
+(per-entry commit under advisory lock `815005`; never mutates existing rows) and
+`GET /admin/catalog` previews the plan. **Watchlists** — per-user lists
+(`/watchlists` CRUD) surfaced as dashboard tabs and star toggles. **Whole-market
+lazy load** — `GET /market/search` finds any NSE/BSE symbol; `POST /market/track`
+normalizes it, inserts the instrument, and enqueues an `ingest_jobs` row;
+`GET /market/track/{symbol}/status` reports progress. The durable queue survives
+restarts and is drained both opportunistically (BackgroundTasks) and by a
+5-minute scheduler tick (lock `815004`). `MAX_TRACKED_INSTRUMENTS` (default 300)
+caps total instruments. `GET /instruments/summary` is paginated/searchable
+(`q`, `types`, `watchlist_id`, `limit`, `offset`) returning `{items, total}`.
+
+### 3.10 External data providers (Phase 6)
+
+`app/providers/` — a capability-based abstraction. `BaseProvider` declares a
+`frozenset[Capability]` and never-raising methods (`search_symbols`,
+`get_quote`, `fetch_news`, `fetch_fundamentals`); `registry.py` orders providers
+by `PROVIDER_PRIORITY` and tries them left-to-right per capability. Providers:
+keyless **yfinance** (always the baseline), **Finnhub**, **Alpha Vantage**
+(daily-cap guarded). Every provider degrades to empty when its key is absent, so
+the platform runs fully keyless. News ingest is quota-guarded
+(`NEWS_INGEST_DAILY_CAP`): held/watched symbols first, then the rest rotated by
+day index.
+
+### 3.11 Portfolio analytics (Phase 6)
+
+`app/services/portfolio_analytics.py` — **numpy-only** (no scipy) quantitative
+finance over the paper portfolio's holdings and stored daily bars:
+**historical + parametric Value-at-Risk** (inverse-normal via Acklam's rational
+approximation), **Monte-Carlo GBM** simulation (`np.random.default_rng`), and
+**long-only mean-variance optimization** (Dirichlet-sampled efficient frontier,
+avoiding a QP-solver dependency). Exposed at
+`GET /simulation/analytics/{risk,montecarlo,optimization}`; UI: `/portfolio`.
+
+### 3.12 UI system & floating assistant (Phase 6)
+
+A design-token system (Tailwind v4 CSS vars, the 9 original brand colors
+preserved) + a hand-built primitive library (`components/ui/*`). A professional
+`TradingChart` (persisted lightweight-charts instance, MA overlays, forecast
+band, trade markers) replaces the prior rebuild-on-every-render chart. A
+**site-wide floating assistant** (`components/assistant/AssistantDock.tsx`) talks
+to a dedicated chat session (persisted in localStorage, validated against the
+server); on an instrument page it prefixes messages with `[viewing SYMBOL]` so
+the existing chat RAG grounds the answer — no backend change. A Cmd/Ctrl-K
+**command palette** searches the universe and tracks new symbols.
+
 ## 4. Database
 
 Supabase Postgres 17 + pgvector; async SQLAlchemy 2 + asyncpg. Alembic head:
-**`0013_run_context`**. RLS is enabled deny-by-default on every public table
+**`0015_ingest_jobs`**. RLS is enabled deny-by-default on every public table
 (locks the auto-generated REST API); the backend connects as `postgres` and
 enforces ownership in application code.
 
 | Group | Tables |
 |---|---|
-| Market data (adopted) | `instruments` (16, + `sector_id`/`industry_id`), `price_bars`, `data_providers`, `instrument_provider_mappings`, `exchanges`, warehouse tables |
+| Market data (adopted) | `instruments` (curated Nifty-100 + on-demand, + `sector_id`/`industry_id`), `price_bars`, `data_providers`, `instrument_provider_mappings`, `exchanges`, warehouse tables |
 | AI core (owned) | `forecasts`, `backtests`, `agent_runs` (+`context_snapshot`), `agent_messages`, `chat_sessions`, `chat_messages`, `agent_embeddings` (vector 384) |
 | Paper trading (owned, Phase 5) | `sim_portfolios`, `sim_orders`, `sim_trades`, `sim_positions` |
 | Research (owned, Phase 5) | `instrument_fundamentals` (JSONB cache), `research_documents` (news corpus, vector 384) |
+| Market expansion (owned, Phase 6) | `watchlists`, `watchlist_items` (`0014`), `ingest_jobs` durable queue (`0015`) |
 
-Migration chain: `0004_warehouse` → … → `0009_user_ownership` →
-`0010_revoke_admin_execute` → **`0011_simulation`** → **`0012_research`** →
-**`0013_run_context`**. Applied manually (`alembic upgrade head`); CI proves
+Migration chain: `0004_warehouse` → … → **`0011_simulation`** →
+**`0012_research`** → **`0013_run_context`** → **`0014_watchlists`** →
+**`0015_ingest_jobs`**. Applied manually (`alembic upgrade head`); CI proves
 the full chain on vanilla Postgres (`pgvector/pgvector:pg17`).
 
 ## 5. Auth & multi-user isolation
@@ -206,27 +296,42 @@ APScheduler in-process (single-flight via Postgres advisory locks):
 |---|---|---|
 | `daily_ingest` | `DAILY_INGEST_HOUR:MINUTE` UTC | 815001 |
 | `sim_order_sweep` | ingest + 15 min | 815002 |
-| `news_ingest` | ingest + 30 min (if `ENABLE_NEWS_INGEST`) | 815003 |
+| `news_ingest` | ingest + 30 min (if `ENABLE_NEWS_INGEST`; quota-guarded by `NEWS_INGEST_DAILY_CAP`) | 815003 |
+| `ingest_job_drain` (Phase 6) | every 5 min | 815004 |
 | `space_keepalive` | every 6 h (remote inference only) | — |
+
+Advisory-lock `815005` guards `POST /admin/catalog/sync` (held across per-entry
+commits, not transaction-scoped). Whole-market tracking also drains its queue
+opportunistically via `BackgroundTasks` on each `POST /market/track`.
 
 ## 7. Frontend
 
 Next.js 15 App Router + TypeScript, Tailwind v4, TanStack Query,
 lightweight-charts v5. All backend access goes through the authenticated
 same-origin proxy `app/api/backend/[...path]` (attaches the Supabase JWT
-server-side). Pages: Dashboard, Instrument detail (candles + forecast overlay
-+ backtest + **Research**), **Simulation** (portfolio, order ticket,
-proposals accept/reject, performance charts, intelligence), Agents + run
-detail (**explanation panel**, **Send to Simulation**), **Insights**
-(evaluation), Chat (**news citations**), Login (+ guest).
+server-side; forwards `204/304` with a null body). **Phase 6 redesign**: a
+CSS-var design-token system + hand-built `components/ui/*` primitives (Card,
+Stat, Table, Badge, Button, Input, Sheet, EmptyState, Skeleton…), a responsive
+shell with a mobile drawer, a persisted-instance `TradingChart`, a Cmd/Ctrl-K
+command palette, and a site-wide floating `AssistantDock`. Pages: Dashboard
+(watchlist-aware universe table), Instrument detail (chart + forecast overlay +
+backtest + **Research** + watchlist star), **Portfolio** (VaR / Monte-Carlo /
+optimization), **Simulation** (portfolio, order ticket, proposals
+accept/reject, performance charts, intelligence), Agents + run detail
+(**explanation panel**, **Send to Simulation**), **Insights** (evaluation),
+Chat (**news citations**), Login (+ guest).
 
 ## 8. Configuration
 
 `.env`-driven pydantic settings; full reference in
 [environment.md](environment.md). Phase 5 additions: `SIM_STARTING_CASH`,
 `FUNDAMENTALS_TTL_HOURS`, `ENABLE_NEWS_INGEST`, `NEWS_RAG_TOP_K`,
-`NEWS_RETENTION_DAYS`, `LLM_COST_INPUT_PER_1M`, `LLM_COST_OUTPUT_PER_1M` —
-all with safe defaults (no deploy-time action required).
+`NEWS_RETENTION_DAYS`, `LLM_COST_INPUT_PER_1M`, `LLM_COST_OUTPUT_PER_1M`.
+Phase 6 additions: `FINNHUB_API_KEY`, `ALPHA_VANTAGE_API_KEY` (secrets),
+`ALPHA_VANTAGE_DAILY_CAP`, `PROVIDER_PRIORITY`, `MAX_TRACKED_INSTRUMENTS`,
+`NEWS_INGEST_DAILY_CAP`, `INGEST_PAUSE_SECONDS`. All have safe defaults (the
+providers degrade to keyless yfinance), so no deploy-time action is required
+beyond setting the two provider secrets if those integrations are wanted.
 
 ## 9. Testing & CI
 
@@ -255,6 +360,13 @@ all with safe defaults (no deploy-time action required).
 ## 11. Non-goals
 
 Real trading/order execution; notifications (permanently out of scope);
-intraday data; a durable job queue (future); multi-tenant RLS policies (data
-access is backend-mediated with ownership in app code); document uploads for
-RAG (news-only corpus this phase, by owner decision).
+intraday data; multi-tenant RLS policies (data access is backend-mediated with
+ownership in app code); document uploads for RAG (news-only corpus this phase,
+by owner decision).
+
+**Deferred (Phase 6, ready for a later phase):** streaming assistant responses
+(needs backend SSE + proxy passthrough); Reddit / Twitter-X sentiment and
+OpenBB providers (the `providers/` abstraction is ready for them); correlated
+(covariance-based) Monte-Carlo (current model is per-asset GBM); the official
+TradingView Charting Library (current charts use lightweight-charts — no license
+was available; swap-in path documented for when one is).

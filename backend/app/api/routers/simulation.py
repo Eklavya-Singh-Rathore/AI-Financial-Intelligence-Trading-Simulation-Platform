@@ -184,6 +184,50 @@ async def get_intelligence(
     return IntelligenceOut(**data)
 
 
+@router.get("/analytics/risk")
+async def analytics_risk(
+    auth: Auth,
+    horizon_days: int = 1,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    from app.services import portfolio_analytics
+
+    portfolio = await _portfolio(session, auth)
+    horizon = max(1, min(horizon_days, 60))
+    return await portfolio_analytics.analytics_bundle(
+        session, portfolio, "risk", horizon_days=horizon
+    )
+
+
+@router.get("/analytics/montecarlo")
+async def analytics_montecarlo(
+    auth: Auth,
+    horizon_days: int = 252,
+    paths: int = 2000,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    from app.services import portfolio_analytics
+
+    portfolio = await _portfolio(session, auth)
+    return await portfolio_analytics.analytics_bundle(
+        session,
+        portfolio,
+        "montecarlo",
+        horizon_days=max(1, min(horizon_days, 504)),
+        n_paths=max(100, min(paths, 5000)),
+    )
+
+
+@router.get("/analytics/optimization")
+async def analytics_optimization(
+    auth: Auth, session: AsyncSession = Depends(get_session)
+) -> dict:
+    from app.services import portfolio_analytics
+
+    portfolio = await _portfolio(session, auth)
+    return await portfolio_analytics.analytics_bundle(session, portfolio, "optimization")
+
+
 @router.post("/proposals", response_model=OrderOut, status_code=201)
 async def create_proposal(
     payload: ProposalCreate, auth: Auth, session: AsyncSession = Depends(get_session)

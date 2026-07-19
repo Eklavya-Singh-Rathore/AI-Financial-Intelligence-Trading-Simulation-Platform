@@ -3,6 +3,7 @@
 import { CandlestickChart } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { Button, Card, CardBody, Input } from "@/components/ui";
 import { authConfigured, supabaseBrowser } from "@/lib/supabase";
 
 export default function LoginPage() {
@@ -90,61 +91,62 @@ export default function LoginPage() {
         <CandlestickChart size={22} className="text-accent" />
         FinIntel
       </div>
-      <form onSubmit={submit} className="space-y-3 rounded-lg border border-line p-5">
-        <h1 className="text-base font-medium">
-          {mode === "signin" ? "Sign in" : "Create your account"}
-        </h1>
-        <input
-          type="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="email"
-          className="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
-        />
-        <input
-          type="password"
-          required
-          minLength={8}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="password (min 8 chars)"
-          className="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
-        />
-        {error && <p className="text-sm text-loss">{error}</p>}
-        {notice && <p className="text-sm text-gain">{notice}</p>}
-        <button
-          type="submit"
-          disabled={busy}
-          className="w-full rounded-md bg-accent px-3 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
-        >
-          {busy ? "…" : mode === "signin" ? "Sign in" : "Sign up"}
-        </button>
-        <button
-          type="button"
-          onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
-          className="w-full text-center text-xs text-ink-2 hover:text-ink"
-        >
-          {mode === "signin" ? "No account? Sign up" : "Have an account? Sign in"}
-        </button>
-        {guestEnabled && (
-          <>
-            <div className="flex items-center gap-2 pt-1 text-[10px] uppercase tracking-wide text-ink-3">
-              <span className="h-px flex-1 bg-line" />
-              or
-              <span className="h-px flex-1 bg-line" />
-            </div>
-            <button
+      <Card>
+        <CardBody>
+          <form onSubmit={submit} className="space-y-3">
+            <h1 className="text-base font-medium">
+              {mode === "signin" ? "Sign in" : "Create your account"}
+            </h1>
+            <Input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="email"
+            />
+            <Input
+              type="password"
+              required
+              minLength={8}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="password (min 8 chars)"
+            />
+            {error && <p className="text-sm text-loss">{error}</p>}
+            {notice && <p className="text-sm text-gain">{notice}</p>}
+            <Button type="submit" disabled={busy} className="w-full">
+              {busy ? "…" : mode === "signin" ? "Sign in" : "Sign up"}
+            </Button>
+            <Button
               type="button"
-              onClick={continueAsGuest}
-              disabled={guestBusy || busy}
-              className="w-full rounded-md border border-line px-3 py-2 text-sm font-medium text-ink hover:border-accent disabled:opacity-50"
+              variant="ghost"
+              size="sm"
+              onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
+              className="w-full"
             >
-              {guestBusy ? "…" : "Continue as Guest"}
-            </button>
-          </>
-        )}
-      </form>
+              {mode === "signin" ? "No account? Sign up" : "Have an account? Sign in"}
+            </Button>
+            {guestEnabled && (
+              <>
+                <div className="flex items-center gap-2 pt-1 text-[10px] uppercase tracking-wide text-ink-3">
+                  <span className="h-px flex-1 bg-line" />
+                  or
+                  <span className="h-px flex-1 bg-line" />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={continueAsGuest}
+                  disabled={guestBusy || busy}
+                  className="w-full"
+                >
+                  {guestBusy ? "…" : "Continue as Guest"}
+                </Button>
+              </>
+            )}
+          </form>
+        </CardBody>
+      </Card>
       <p className="mt-4 text-center text-xs text-ink-3">
         Decision-support research only — no real trading.
       </p>

@@ -2,23 +2,41 @@
 
 **Next.js 15** (App Router, TypeScript) + Tailwind v4 + TanStack Query +
 TradingView `lightweight-charts` + `next-themes` (system-adaptive light/dark).
-Deployed on Vercel (project root `frontend/`).
+Deployed on Vercel (project root `frontend/`). **Phase 6** adds a CSS-var
+**design-token system** and a hand-built primitive library (`components/ui/*` —
+Card, Stat, Table, Badge, Button, Input, Select, Tabs, Sheet, EmptyState,
+Skeleton, Spinner), a responsive **app shell** with a mobile drawer, a Cmd/Ctrl-K
+**command palette**, and a site-wide **floating AI assistant**.
 
 ## Pages (`app/`)
 
 | Route | Purpose |
 |---|---|
 | `/login` | Sign in / sign up (Supabase browser client) + **Continue as Guest** |
-| `/` | Dashboard — 16-asset universe table with sparkline stats |
-| `/instruments/[symbol]` | Candles + SMA/EMA overlays + forecast overlay (Kronos/baseline); SMA-crossover backtest with metric tiles; "Analyze with agents"; **Research** (profile, earnings trend, statement tables) |
-| `/simulation` | Paper trading — portfolio tiles + positions, order ticket (market/limit/stop), open orders + AI proposals (accept/reject), trades, equity/drawdown chart + metrics, allocation bars, intelligence panel |
+| `/` | Dashboard — **watchlist-aware** universe table (search/filter/sort, watchlist tabs, star toggles, 30-day trend) |
+| `/instruments/[symbol]` | Professional **`TradingChart`** (candles/volume + MA overlays + forecast band + trade markers); SMA-crossover backtest with metric tiles; "Analyze with agents"; **Research** (profile, earnings trend, statement tables); watchlist star |
+| `/portfolio` | **Portfolio analytics** — holdings, allocation, Value-at-Risk, Monte-Carlo simulation, mean-variance optimization (Phase 6) |
+| `/simulation` | Paper trading (redesigned focused workspace) — portfolio tiles + positions, order ticket (market/limit/stop), open orders + AI proposals (accept/reject), trade history |
 | `/agents`, `/agents/[runId]` | Agent-run list + live-polling transcript & decision card; **explanation panel** (why/stances/indicators/forecast/backtest/risk at decision time) + **Send to Simulation** |
 | `/insights` | AI evaluation — forecast accuracy, agent stats, recommendation success, usage & cost + portfolio-intelligence digest |
 | `/chat` | Persisted chat sessions with grounded, context-chipped answers + **numbered news citations** (clickable) |
 
-Shared UI in `components/` (`Shell`, `CandleChart`, `RunBits`,
-`ResearchSection`, `sim/EquityChart`); API layer in `lib/api.ts`; Supabase
-browser client in `lib/supabase.ts`.
+Shared UI in `components/`: the `ui/*` primitive library, `Shell`,
+`chart/TradingChart` (persisted lightweight-charts instance — replaced the old
+rebuild-on-every-render `CandleChart`), `assistant/AssistantDock`,
+`SearchCommand` (command palette), `WatchlistStar`, `RunBits`,
+`ResearchSection`, `sim/*` (order ticket, holdings, allocation…),
+`portfolio/*` (Monte-Carlo + frontier charts), `chat/ContextChips`. Pure logic
+lives in `lib/*.mjs` with `node:test` coverage; API layer in `lib/api.ts`;
+Supabase browser client in `lib/supabase.ts`.
+
+**Charting.** All chart wiring is isolated in `components/chart/` — the
+`useTradingChart` hook creates the lightweight-charts instance once and
+reconciles series from data (the persisted-instance pattern), and `TradingChart`
+owns the toolbar/overlays. Pages only pass data + config. lightweight-charts was
+chosen because no TradingView **Charting Library** license was available;
+swapping to the official library later is a change confined to this folder — the
+page contract (props in, chart out) does not move. (Deferred, Phase 6.)
 
 ## The authenticated backend proxy
 
@@ -31,7 +49,8 @@ same-origin catch-all route `app/api/backend/[...path]/route.ts`:
 - `export const maxDuration = 300` — forecast/backtest/chat are single
   synchronous calls that may ride out a Render cold start + HF Space wake; 300 s
   is the Vercel Hobby+Fluid ceiling.
-- Buffers the response (no streaming). Network failure → a neutral `502`.
+- Buffers the response (no streaming); forwards `204/304` with a null body
+  (a non-null body on a null-body status throws). Network failure → a neutral `502`.
 
 Because the proxy holds the credentials server-side, the backend API key and
 guest password never reach the browser.

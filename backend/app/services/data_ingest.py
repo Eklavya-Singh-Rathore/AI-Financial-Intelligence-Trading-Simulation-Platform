@@ -20,6 +20,7 @@ import structlog
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.instruments import DEFAULT_CURRENCY, DEFAULT_TIMEFRAME
 from app.models.price_bar import PriceBar
 from app.services import market_data
@@ -233,6 +234,11 @@ async def ingest_all(
         summary.results.append(res)
         summary.total_inserted += res.inserted
         summary.total_fetched += res.fetched
+        # Gentleness knob (Phase 6): at ~100 instruments a sequential burst can
+        # trip yfinance throttling; a short pause between symbols avoids it.
+        pause = get_settings().ingest_pause_seconds
+        if pause > 0:
+            await asyncio.sleep(pause)
 
     log.info(
         "ingest_all_done",
