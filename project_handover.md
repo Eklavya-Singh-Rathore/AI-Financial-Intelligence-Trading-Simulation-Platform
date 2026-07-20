@@ -1,14 +1,14 @@
 # project_handover.md
 
 > **Single source of truth for resuming development** — self-contained; no prior
-> conversations needed. Last updated: **2026-07-20, Phase 6.5 Stage 1 committed
-> and pushed (not yet merged)**. Phase 6 remains **SHIPPED and live in
-> production** (merged to `main` at `b839223`, Render deploy
-> `dep-d9e8aajrjlhs73bu2udg` LIVE, Vercel auto-deployed,
-> guest→Vercel→Render→Supabase path production-verified — see §6–7). Phase 6.5
-> (professional chart upgrade: intraday intervals, more chart types, indicators,
-> drawing tools, chart-docked trading, AI overlays) is in active development on
-> branch `claude/phase-6-5-professional-charting`, Stage 1 of 5 done — see §10.
+> conversations needed. Last updated: **2026-07-20, Phase 6.5 Stage 2 merged to
+> `main` (`76f2388`) + deploying**. Phase 6.5 ships stage-by-stage: each stage is
+> merged to `main` (Vercel auto-deploys the frontend) and the Render backend is
+> redeployed to match, then production-verified. Stages 1–2 of 5 done (intraday
+> intervals, 7 chart types, 15 indicators + picker + presets). Phase 6
+> (professional UI, market expansion, analytics) remains the prior live baseline.
+> Remaining Phase 6.5: drawing tools + Volume Profile (Stage 3), chart-docked
+> trading + AI overlays (Stage 4), polish/docs/final-ship (Stage 5) — see §10.
 
 ## 1. What this is
 
@@ -28,13 +28,13 @@ and **evaluates** its own AI quality (`/insights`). Phase 6 layers on a
 charting) and **external data providers** (Finnhub + Alpha Vantage).
 
 - Repo: https://github.com/Eklavya-Singh-Rathore/AI-Financial-Intelligence-Trading-Simulation-Platform
-  — `main` at **`1263135`** (Phase 6 merge `b839223` + a handover-doc commit;
-  this is the deployed code). Phase 6.5 is on branch
-  **`claude/phase-6-5-professional-charting`** (pushed, not yet merged), one
-  commit so far: Stage 1 (`eb34bdc`).
+  — `main` at **`76f2388`** (Phase 6.5 Stage 2, deployed). Ongoing Phase 6.5
+  work continues on branch **`claude/phase-6-5-professional-charting`** (main is
+  fast-forwarded to the branch tip after each stage).
 - DB/Auth: Supabase **`ai-stock-prediction`** (`rekoawsoghrjcimknkfz`, ap-south-1, PG 17)
 - **Live** (§7): Vercel frontend · Render backend · HF inference Space · Supabase —
-  all serving the **Phase 6** code (Phase 6.5 is not deployed yet).
+  serving **Phase 6.5 through Stage 2**. No new migrations in Phase 6.5 so far
+  (chart interval/indicator work is compute-only); Supabase head stays `0015`.
 - Docs: **`docs/MASTER_ARCHITECTURE.md`** (start here), `docs/architecture/`
   (7 docs), `docs/adr/` (ADR-0001..0006), `docs/deploy-render.md`,
   `docs/deploy-hf-space.md`, `docs/environment.md`, `README.md`.
@@ -58,7 +58,7 @@ charting) and **external data providers** (Finnhub + Alpha Vantage).
 | 4.6 | **Stabilization**: full E2E verification, **Guest Login**, 2 bug fixes, DB hardening (migration 0010), architecture docs (7) + ADRs (5) |
 | 5 | **Intelligence, research & paper trading** (2026-07-17): paper-trading engine + `/simulation` (API+UI), financial research (profiles/statements/earnings), news RAG + chat citations, explainability (+`context_snapshot`), portfolio intelligence, AI evaluation + `/insights`, `docs/MASTER_ARCHITECTURE.md` + ADR-0006, migrations 0011–0013 |
 | 6 | **Professional trading experience & market expansion** (2026-07-19, merge `b839223`): Kronos audit surfaced in `/health`; watchlists (migration 0014); paginated/searchable `/instruments/summary`; curated Nifty-100 catalog + idempotent admin sync + backfill; external-provider abstraction (Finnhub + Alpha Vantage, degrade-to-keyless); whole-market lazy load + durable `ingest_jobs` queue (migration 0015); numpy-only portfolio analytics (VaR/Monte-Carlo/optimization); frontend design system + `components/ui/*`; professional `TradingChart` (persisted lightweight-charts instance, panes, forecast band, trade markers); redesigned dashboard/Portfolio/Simulation; command palette; site-wide floating assistant; design-system polish across agents/insights/chat/login; proxy 204/304 fix |
-| 6.5 *(in progress)* | **Professional trading chart upgrade** — Stage 1 of 5 done (2026-07-20, `eb34bdc`): audited the chart (stays on Lightweight Charts, official TradingView Charting Library needs a license the owner doesn't have), added a multi-interval OHLCV resolver (1m/5m/15m/30m/1H via on-demand yfinance intraday, not persisted; 1D from stored bars; 1W/1M resampled), 10 range presets, 7 chart types (candles/hollow/bar/line/area/baseline/Heikin-Ashi). Remaining: indicator expansion + Volume Profile + presets (Stage 2), drawing tools (Stage 3), chart-docked trading + AI overlays (Stage 4), polish/docs/ship (Stage 5). Design spec: see §10 |
+| 6.5 *(in progress)* | **Professional trading chart upgrade** — Stages 1–2 of 5 done (2026-07-20). Stage 1 (`eb34bdc`): stays on Lightweight Charts (official Charting Library needs a license the owner lacks); multi-interval OHLCV resolver (1m/5m/15m/30m/1H via on-demand yfinance intraday, not persisted; 1D stored; 1W/1M resampled), 10 range presets, 7 chart types. Stage 2 (`76f2388`): 10 new indicators (VWAP/ATR/SuperTrend/ADX/StochRSI/CCI/OBV/PSAR/Donchian/Ichimoku), a data-driven indicator catalog + generic renderer, a picker dropdown (15 indicators), localStorage presets. Merged to `main` + Render/Vercel deployed. Remaining: drawing tools + Volume Profile (Stage 3), chart-docked trading + AI overlays (Stage 4), polish/docs/final-ship (Stage 5). Design spec: see §10 |
 
 ## 3. Architecture
 
@@ -275,13 +275,25 @@ spec + staged implementation plan, both approved by the owner).
 frontend interval selector (1m/5m/15m/30m/1H/1D/1W/1M), 10 range presets
 (1D…MAX), and 7 chart types (candles/hollow/bar/line/area/baseline/Heikin-Ashi).
 Verified live against real NSE data (5m RSI recomputed over 4256 points, IST
-session timestamps correct) and gated (ruff/mypy, 218+6 backend tests, tsc +
-47 frontend tests + build, all green).
+session timestamps correct).
 
-**Remaining stages:** 2 (10 more indicators + Volume Profile + presets), 3
-(drawing-tool canvas engine), 4 (chart-docked order ticket + stop-limit + AI
-research overlays), 5 (polish, docs, full regression, merge, deploy,
-production verification — mirrors the Phase 6 ship playbook in §6–8).
+**Stage 2 (done, `76f2388`):** 10 new backend indicators in
+`app/services/indicators.py` (VWAP, ATR, SuperTrend, ADX, Stochastic RSI, CCI,
+OBV, Parabolic SAR, Donchian, Ichimoku); a data-driven frontend catalog
+(`lib/indicators.ts`) where each `id` doubles as the backend name, a generic
+renderer in `useTradingChart.ts` (overlays on the price pane, oscillators each
+in their own sub-pane, with bands/histograms/reference-levels), an indicator
+picker dropdown in `TradingChart.tsx`, and localStorage presets
+(`lib/chartPresets.mjs`). Verified live (all 10 compute on real data; picker
+toggles refetch + persist; no console errors). **Volume Profile was moved to
+Stage 3** — it needs the same canvas price→pixel coordinate mapping as the
+drawing-tools engine, so it's built there.
+
+**Remaining stages:** 3 (drawing-tool canvas engine **+ Volume Profile**), 4
+(chart-docked order ticket + stop-limit + AI research overlays), 5 (polish,
+docs, full regression, final ship). Per-stage ship playbook (established
+Stages 1–2): gate → live-verify → commit → push → FF `main` → Render deploy +
+Vercel auto → production-verify → update this doc.
 
 **New env vars (Phase 6.5, local `.env` only so far, not yet in
 `.env.example`/`render.yaml`):** `MARKETSTACK_API_KEY`,
