@@ -72,6 +72,32 @@ def fetch_ohlcv_df(yf_symbol: str, start: date, end: date) -> pd.DataFrame:
     return raw
 
 
+def fetch_intraday_df(yf_symbol: str, interval: str, period: str) -> pd.DataFrame:
+    """Fetch intraday OHLCV from yfinance (Phase 6.5).
+
+    ``interval`` is a yfinance grain ('1m'/'5m'/'15m'/'30m'/'60m'); ``period``
+    is the look-back window ('1d'/'5d'/'60d'/'2y') bounded by Yahoo's intraday
+    history limits. The index is tz-aware (exchange local, e.g. IST). Returns an
+    empty frame on no data. Not persisted — intraday is fetched on demand.
+    """
+    import yfinance as yf
+
+    raw = yf.download(
+        yf_symbol,
+        interval=interval,
+        period=period,
+        auto_adjust=False,
+        actions=False,
+        progress=False,
+        threads=False,
+    )
+    if raw is None or raw.empty:
+        return pd.DataFrame()
+    if isinstance(raw.columns, pd.MultiIndex):
+        raw.columns = raw.columns.get_level_values(0)
+    return raw
+
+
 def normalize_bars(
     df: pd.DataFrame,
     instrument_id: uuid.UUID,

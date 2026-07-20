@@ -1,10 +1,10 @@
 "use client";
 
-import { CandlestickChart, LineChart, Maximize2, Minimize2 } from "lucide-react";
+import { Maximize2, Minimize2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ForecastOut, IndicatorPoint, PriceBar } from "@/lib/api";
 import { fmtNum, fmtPct, polarity } from "@/lib/api";
-import { RANGE_PRESETS } from "@/lib/chartRanges.mjs";
+import { INTERVALS, defaultRangeForInterval, rangesForInterval } from "@/lib/chartIntervals.mjs";
 import { cn } from "@/lib/ui";
 import {
   type ChartType,
@@ -13,6 +13,16 @@ import {
   type TradeMarker,
   useTradingChart,
 } from "./useTradingChart";
+
+const CHART_TYPES: { id: ChartType; label: string }[] = [
+  { id: "candles", label: "Candles" },
+  { id: "hollow", label: "Hollow" },
+  { id: "heikin-ashi", label: "Heikin Ashi" },
+  { id: "bar", label: "Bar" },
+  { id: "line", label: "Line" },
+  { id: "area", label: "Area" },
+  { id: "baseline", label: "Baseline" },
+];
 
 function Toggle({
   active,
@@ -31,7 +41,7 @@ function Toggle({
       onClick={onClick}
       title={title}
       className={cn(
-        "rounded-md px-2 py-1 text-xs font-medium transition-colors",
+        "rounded px-1.5 py-1 text-xs font-medium transition-colors",
         active ? "bg-accent/10 text-accent" : "text-ink-3 hover:bg-surface-2 hover:text-ink",
       )}
     >
@@ -40,24 +50,30 @@ function Toggle({
   );
 }
 
+const Sep = () => <span className="mx-1 h-4 w-px shrink-0 bg-line" />;
+
 export function TradingChart({
   bars,
   indicators,
   forecast,
   trades = [],
+  interval,
+  onIntervalChange,
   height = 440,
 }: {
   bars: PriceBar[];
   indicators: IndicatorPoint[];
   forecast: ForecastOut | null;
   trades?: TradeMarker[];
+  interval: string;
+  onIntervalChange: (interval: string) => void;
   height?: number;
 }) {
   const [chartType, setChartType] = useState<ChartType>("candles");
   const [overlays, setOverlays] = useState<Overlays>({ sma: true, ema: false, volume: true });
   const [panes, setPanes] = useState<Panes>({ rsi: false, macd: false });
   const [showMarkers, setShowMarkers] = useState(true);
-  const [range, setRange] = useState<string>("6M");
+  const [range, setRange] = useState<string>(() => defaultRangeForInterval(interval));
 
   const cardRef = useRef<HTMLDivElement>(null);
   const [isFs, setIsFs] = useState(false);
@@ -75,9 +91,14 @@ export function TradingChart({
   });
 
   const hasData = bars.length > 0;
+  // Switching interval → reset to that interval's default range window.
+  useEffect(() => {
+    setRange(defaultRangeForInterval(interval));
+  }, [interval]);
+  // Apply the range window whenever it or the underlying data changes.
   useEffect(() => {
     if (hasData) applyRange(range);
-  }, [range, hasData, applyRange]);
+  }, [range, hasData, applyRange, bars]);
 
   useEffect(() => {
     const onFs = () => setIsFs(document.fullscreenElement === cardRef.current);
@@ -91,21 +112,36 @@ export function TradingChart({
 
   const toggleOverlay = (k: keyof Overlays) => setOverlays((o) => ({ ...o, [k]: !o[k] }));
   const togglePane = (k: keyof Panes) => setPanes((p) => ({ ...p, [k]: !p[k] }));
+  const ranges = rangesForInterval(interval);
 
   return (
     <div ref={cardRef} className={cn("rounded-lg border border-line bg-surface", isFs && "flex flex-col")}>
       {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-2.5 py-1.5">
         <div className="flex flex-wrap items-center gap-1">
+          {/* Interval */}
           <div className="flex items-center rounded-md border border-line p-0.5">
-            <Toggle active={chartType === "candles"} onClick={() => setChartType("candles")} title="Candles">
-              <CandlestickChart size={14} />
-            </Toggle>
-            <Toggle active={chartType === "line"} onClick={() => setChartType("line")} title="Line">
-              <LineChart size={14} />
-            </Toggle>
+            {INTERVALS.map((iv) => (
+              <Toggle key={iv.id} active={interval === iv.id} onClick={() => onIntervalChange(iv.id)}>
+                {iv.label}
+              </Toggle>
+            ))}
           </div>
-          <span className="mx-1 h-4 w-px bg-line" />
+          <Sep />
+          {/* Chart type */}
+          <select
+            value={chartType}
+            onChange={(e) => setChartType(e.target.value as ChartType)}
+            title="Chart type"
+            className="rounded-md border border-line bg-surface px-1.5 py-1 text-xs text-ink-2 outline-none focus:border-accent"
+          >
+            {CHART_TYPES.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+          <Sep />
           <Toggle active={overlays.sma} onClick={() => toggleOverlay("sma")} title="20-period simple MA">
             SMA
           </Toggle>
@@ -115,7 +151,7 @@ export function TradingChart({
           <Toggle active={overlays.volume} onClick={() => toggleOverlay("volume")} title="Volume">
             Vol
           </Toggle>
-          <span className="mx-1 h-4 w-px bg-line" />
+          <Sep />
           <Toggle active={panes.rsi} onClick={() => togglePane("rsi")} title="RSI pane">
             RSI
           </Toggle>
@@ -129,12 +165,12 @@ export function TradingChart({
           )}
         </div>
         <div className="flex items-center gap-0.5">
-          {RANGE_PRESETS.map((p) => (
+          {ranges.map((p) => (
             <Toggle key={p} active={range === p} onClick={() => setRange(p)}>
               {p}
             </Toggle>
           ))}
-          <span className="mx-1 h-4 w-px bg-line" />
+          <Sep />
           <button
             type="button"
             onClick={toggleFs}
@@ -170,11 +206,7 @@ export function TradingChart({
           </div>
         )}
         {/* Container is ALWAYS mounted so the create-once effect can attach. */}
-        <div
-          ref={containerRef}
-          className="w-full"
-          style={{ height: isFs ? "100%" : height }}
-        />
+        <div ref={containerRef} className="w-full" style={{ height: isFs ? "100%" : height }} />
         {!hasData && (
           <div className="absolute inset-0 flex items-center justify-center text-sm text-ink-3">
             No price history yet.

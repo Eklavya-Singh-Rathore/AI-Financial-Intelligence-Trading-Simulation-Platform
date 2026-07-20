@@ -274,13 +274,13 @@ export const api = {
     const suffix = qs.size ? `?${qs}` : "";
     return request<UniverseSummary>(`instruments/summary${suffix}`);
   },
-  prices: (symbol: string, limit = 400) =>
+  prices: (symbol: string, limit = 400, interval?: string) =>
     request<{ symbol: string; bars: PriceBar[] }>(
-      `instruments/${encodeURIComponent(symbol)}/prices?limit=${limit}`,
+      `instruments/${encodeURIComponent(symbol)}/prices?limit=${limit}${interval ? `&interval=${interval}` : ""}`,
     ),
-  indicators: (symbol: string, names: string) =>
+  indicators: (symbol: string, names: string, interval?: string) =>
     request<{ points: IndicatorPoint[] }>(
-      `instruments/${encodeURIComponent(symbol)}/indicators?names=${names}`,
+      `instruments/${encodeURIComponent(symbol)}/indicators?names=${names}${interval ? `&interval=${interval}` : ""}`,
     ),
   forecast: (symbol: string, model: string, horizon = 5) =>
     request<ForecastOut>(

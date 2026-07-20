@@ -21,7 +21,9 @@ class InstrumentOut(BaseModel):
 
 
 class PriceBarOut(BaseModel):
-    date: date
+    # ISO string: a date ("2026-07-17") for daily/weekly/monthly, or naive
+    # exchange-local datetime ("2026-07-20T09:15:00") for intraday (Phase 6.5).
+    date: str
     open: float
     high: float
     low: float
@@ -37,7 +39,7 @@ class PriceSeriesOut(BaseModel):
 
 
 class IndicatorPoint(BaseModel):
-    date: date
+    date: str  # ISO date (daily) or datetime (intraday) — matches PriceBarOut
     values: dict[str, float | None]
 
 

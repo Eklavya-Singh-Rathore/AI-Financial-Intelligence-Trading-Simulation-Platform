@@ -10,6 +10,7 @@ import { ResearchSection } from "@/components/ResearchSection";
 import { WatchlistStar } from "@/components/WatchlistStar";
 import { Button } from "@/components/ui";
 import { api, fmtNum, fmtPct, polarity } from "@/lib/api";
+import { DEFAULT_INTERVAL, isIntradayInterval } from "@/lib/chartIntervals.mjs";
 
 const METRIC_LABELS: Record<string, string> = {
   total_return_pct: "Total return",
@@ -30,9 +31,15 @@ export default function InstrumentPage() {
   const [model, setModel] = useState<"kronos" | "baseline">("kronos");
   const [showForecast, setShowForecast] = useState(true);
   const [btParams, setBtParams] = useState({ fast: 10, slow: 30, engine: "nautilus" });
+  // Chart interval (Phase 6.5): daily by default; intraday grains fetch from yfinance.
+  const [interval, setChartInterval] = useState<string>(DEFAULT_INTERVAL);
+  const intraday = isIntradayInterval(interval);
 
-  // 2000 daily bars ≈ 8y so the chart's All / 3Y range presets have data.
-  const prices = useQuery({ queryKey: ["prices", symbol], queryFn: () => api.prices(symbol, 2000) });
+  // 2000 bars covers the daily 3Y/MAX presets and a full intraday window.
+  const prices = useQuery({
+    queryKey: ["prices", symbol, interval],
+    queryFn: () => api.prices(symbol, 2000, interval),
+  });
   // Backfill status for freshly tracked symbols (Phase 6): poll while queued/running.
   const track = useQuery({
     queryKey: ["trackStatus", symbol],
@@ -43,8 +50,8 @@ export default function InstrumentPage() {
   });
   const backfilling = track.data && ["queued", "running"].includes(track.data.status);
   const indicators = useQuery({
-    queryKey: ["indicators", symbol],
-    queryFn: () => api.indicators(symbol, "sma,ema,rsi,macd"),
+    queryKey: ["indicators", symbol, interval],
+    queryFn: () => api.indicators(symbol, "sma,ema,rsi,macd", interval),
   });
   // Trades for this symbol → buy/sell markers on the chart (memoized so the
   // chart effect doesn't re-run on every render).
@@ -59,7 +66,7 @@ export default function InstrumentPage() {
   const forecast = useQuery({
     queryKey: ["forecast", symbol, model],
     queryFn: () => api.forecast(symbol, model),
-    enabled: showForecast,
+    enabled: showForecast && !intraday, // Kronos forecasts daily horizons
     staleTime: Infinity,
   });
   const backtest = useMutation({
@@ -98,37 +105,46 @@ export default function InstrumentPage() {
       )}
 
       <div className="space-y-2">
-        <div className="flex flex-wrap items-center gap-3 text-sm">
-          <label className="flex items-center gap-1.5 text-ink-2">
-            <input
-              type="checkbox"
-              checked={showForecast}
-              onChange={(e) => setShowForecast(e.target.checked)}
-            />
-            Forecast
-          </label>
-          {showForecast && (
-            <select
-              value={model}
-              onChange={(e) => setModel(e.target.value as "kronos" | "baseline")}
-              className="rounded border border-line bg-surface px-2 py-1 text-xs"
-            >
-              <option value="kronos">kronos</option>
-              <option value="baseline">baseline</option>
-            </select>
-          )}
-          {showForecast && forecast.isLoading && (
-            <span className="text-xs text-ink-3">running {model}…</span>
-          )}
-          {showForecast && forecast.error && (
-            <span className="text-xs text-loss">forecast unavailable</span>
-          )}
-        </div>
+        {intraday ? (
+          <p className="text-xs text-ink-3">
+            Intraday ({interval}) from yfinance — delayed, recent window only. The Kronos
+            forecast overlays on the daily/weekly/monthly intervals.
+          </p>
+        ) : (
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            <label className="flex items-center gap-1.5 text-ink-2">
+              <input
+                type="checkbox"
+                checked={showForecast}
+                onChange={(e) => setShowForecast(e.target.checked)}
+              />
+              Forecast
+            </label>
+            {showForecast && (
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value as "kronos" | "baseline")}
+                className="rounded border border-line bg-surface px-2 py-1 text-xs"
+              >
+                <option value="kronos">kronos</option>
+                <option value="baseline">baseline</option>
+              </select>
+            )}
+            {showForecast && forecast.isLoading && (
+              <span className="text-xs text-ink-3">running {model}…</span>
+            )}
+            {showForecast && forecast.error && (
+              <span className="text-xs text-loss">forecast unavailable</span>
+            )}
+          </div>
+        )}
         <TradingChart
           bars={prices.data?.bars ?? []}
           indicators={indicators.data?.points ?? []}
-          forecast={showForecast ? (forecast.data ?? null) : null}
+          forecast={showForecast && !intraday ? (forecast.data ?? null) : null}
           trades={symbolTrades}
+          interval={interval}
+          onIntervalChange={setChartInterval}
         />
       </div>
 

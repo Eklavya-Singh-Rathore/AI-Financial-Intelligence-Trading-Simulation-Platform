@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date
 from typing import Annotated
 
 import pandas as pd
@@ -23,7 +22,7 @@ from app.schemas.market import (
     PriceSeriesOut,
     UniverseSummaryOut,
 )
-from app.services import forecast_service, market_data, research, watchlists
+from app.services import forecast_service, market_data, ohlcv, research, watchlists
 from app.services.indicators import SUPPORTED_INDICATORS, compute_indicators
 
 router = APIRouter(prefix="/instruments", tags=["instruments"])
@@ -73,18 +72,21 @@ async def universe_summary(
     )
 
 
-async def _get_instrument_or_404(session: AsyncSession, symbol: str):
-    instrument = await market_data.get_instrument_by_symbol(session, symbol.upper())
-    if instrument is None:
-        raise HTTPException(status_code=404, detail=f"instrument '{symbol}' not found")
-    return instrument
+def _validate_interval(interval: str) -> None:
+    if interval not in ohlcv.VALID_INTERVALS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"unknown interval '{interval}'. Supported: {list(ohlcv.VALID_INTERVALS)}",
+        )
 
 
 @router.get("/{symbol}/prices", response_model=PriceSeriesOut)
 async def get_prices(
     symbol: str,
-    start: date | None = Query(default=None),
-    end: date | None = Query(default=None),
+    interval: str = Query(
+        default=ohlcv.DEFAULT_INTERVAL,
+        description=f"Bar interval: {', '.join(ohlcv.VALID_INTERVALS)}.",
+    ),
     limit: int = Query(
         default=10_000,
         ge=1,
@@ -93,23 +95,25 @@ async def get_prices(
     ),
     session: AsyncSession = Depends(get_session),
 ) -> PriceSeriesOut:
-    instrument = await _get_instrument_or_404(session, symbol)
-    bars = await market_data.get_price_bars(session, instrument.id, start=start, end=end)
-    if len(bars) > limit:
-        bars = bars[-limit:]
+    """OHLCV at the requested interval. Daily/weekly/monthly come from stored
+    bars; intraday (1m…1H) is fetched on demand from yfinance (Phase 6.5)."""
+    _validate_interval(interval)
+    try:
+        bars = await ohlcv.get_bars(session, symbol, interval, limit=limit)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     out = [
         PriceBarOut(
-            date=b.date,
-            open=float(b.open),
-            high=float(b.high),
-            low=float(b.low),
-            close=float(b.close),
-            adj_close=float(b.adj_close) if b.adj_close is not None else None,
-            volume=int(b.volume),
+            date=b.time,
+            open=b.open,
+            high=b.high,
+            low=b.low,
+            close=b.close,
+            volume=b.volume,
         )
         for b in bars
     ]
-    return PriceSeriesOut(symbol=instrument.symbol, count=len(out), bars=out)
+    return PriceSeriesOut(symbol=symbol.upper(), count=len(out), bars=out)
 
 
 @router.get("/{symbol}/indicators", response_model=IndicatorSeriesOut)
@@ -119,8 +123,10 @@ async def get_indicators(
         default="sma,rsi",
         description=f"Comma-separated indicators: {', '.join(SUPPORTED_INDICATORS)}",
     ),
-    start: date | None = Query(default=None),
-    end: date | None = Query(default=None),
+    interval: str = Query(
+        default=ohlcv.DEFAULT_INTERVAL,
+        description=f"Bar interval: {', '.join(ohlcv.VALID_INTERVALS)}.",
+    ),
     session: AsyncSession = Depends(get_session),
 ) -> IndicatorSeriesOut:
     requested = [n.strip().lower() for n in names.split(",") if n.strip()]
@@ -130,23 +136,27 @@ async def get_indicators(
             status_code=422,
             detail=f"unknown indicators: {unknown}. Supported: {list(SUPPORTED_INDICATORS)}",
         )
-    instrument = await _get_instrument_or_404(session, symbol)
-    df = await market_data.price_bars_dataframe(session, instrument.id, start=start, end=end)
+    _validate_interval(interval)
+    try:
+        df = await ohlcv.get_bars_df(session, symbol, interval)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     if df.empty:
         return IndicatorSeriesOut(
-            symbol=instrument.symbol, indicators=requested, count=0, points=[]
+            symbol=symbol.upper(), indicators=requested, count=0, points=[]
         )
     values = compute_indicators(df, requested)
     records = values.where(pd.notna(values), None).to_dict(orient="index")
+    intraday = ohlcv.is_intraday(interval)
     points = [
         IndicatorPoint(
-            date=idx.date(),
+            date=ohlcv.time_str(idx, intraday),
             values={k: (None if v is None else float(v)) for k, v in records[idx].items()},
         )
         for idx in values.index
     ]
     return IndicatorSeriesOut(
-        symbol=instrument.symbol,
+        symbol=symbol.upper(),
         indicators=requested,
         count=len(points),
         points=points,

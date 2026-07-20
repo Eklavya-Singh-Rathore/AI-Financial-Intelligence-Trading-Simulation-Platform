@@ -22,9 +22,19 @@ export function chartColors() {
   };
 }
 
-/** Daily-bar date string ("2026-07-17") → chart UTCTimestamp (seconds). */
-export function toTime(date: string): UTCTimestamp {
-  return (new Date(date + "T00:00:00Z").getTime() / 1000) as UTCTimestamp;
+/** Bar time string → chart UTCTimestamp (seconds).
+ *  Accepts a date ("2026-07-17" → midnight UTC) or an intraday datetime
+ *  ("2026-07-20T09:15:00"); a naive datetime is treated as UTC so the exchange
+ *  wall-clock (IST session times) renders as-is. Offset-bearing ISO is used
+ *  verbatim. (Phase 6.5) */
+export function toTime(t: string): UTCTimestamp {
+  const iso =
+    t.length <= 10
+      ? `${t}T00:00:00Z`
+      : /[zZ]|[+-]\d\d:?\d\d$/.test(t)
+        ? t
+        : `${t}Z`;
+  return (new Date(iso).getTime() / 1000) as UTCTimestamp;
 }
 
 /** 8-digit hex from a 6-digit hex + 0–255 alpha (chart series need rgba-ish). */

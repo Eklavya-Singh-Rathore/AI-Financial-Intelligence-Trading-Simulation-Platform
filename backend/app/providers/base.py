@@ -5,7 +5,23 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-Capability = Literal["quotes", "fundamentals", "news", "sentiment", "symbol_search"]
+Capability = Literal[
+    "quotes", "fundamentals", "news", "sentiment", "symbol_search", "ohlcv"
+]
+
+
+@dataclass
+class OhlcvBar:
+    """One OHLCV bar. ``time`` is an ISO string: a date ("2026-07-17") for
+    daily/weekly/monthly, or naive exchange-local wall-clock
+    ("2026-07-20T09:15:00") for intraday (so the chart renders IST times)."""
+
+    time: str
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: int
 
 
 @dataclass
@@ -76,3 +92,10 @@ class BaseProvider:
 
     def fetch_fundamentals(self, provider_symbol: str) -> FundamentalsBundle | None:
         return None
+
+    def fetch_ohlcv(
+        self, provider_symbol: str, interval: str, *, period: str | None = None
+    ) -> list[OhlcvBar]:
+        """Fetch intraday/daily OHLCV bars at ``interval`` (e.g. '5m', '1d').
+        ``period`` is a provider look-back hint. Empty list on any failure."""
+        return []

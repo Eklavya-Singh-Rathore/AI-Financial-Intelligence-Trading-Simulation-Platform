@@ -7,6 +7,8 @@
 // legend read live data.
 import {
   AreaSeries,
+  BarSeries,
+  BaselineSeries,
   CandlestickSeries,
   ColorType,
   HistogramSeries,
@@ -26,8 +28,18 @@ import type { ForecastOut, IndicatorPoint, PriceBar } from "@/lib/api";
 import { chartColors, toTime, withAlpha } from "@/lib/chart";
 import { tradesToMarkers } from "@/lib/chartMarkers.mjs";
 import { visibleRangeFor } from "@/lib/chartRanges.mjs";
+import { heikinAshi } from "@/lib/heikinAshi.mjs";
 
-export type ChartType = "candles" | "line";
+export type ChartType =
+  | "candles"
+  | "hollow"
+  | "bar"
+  | "line"
+  | "area"
+  | "baseline"
+  | "heikin-ashi";
+
+const CANDLE_LIKE = new Set<ChartType>(["candles", "hollow", "heikin-ashi"]);
 export type Overlays = { sma: boolean; ema: boolean; volume: boolean };
 export type Panes = { rsi: boolean; macd: boolean };
 export type TradeMarker = { date: string; side: string; qty: number; price: number };
@@ -55,6 +67,21 @@ type Args = {
 };
 
 type AnySeries = ISeriesApi<SeriesType>;
+
+function createMainSeries(chart: IChartApi, type: ChartType): AnySeries {
+  switch (type) {
+    case "bar":
+      return chart.addSeries(BarSeries, {});
+    case "line":
+      return chart.addSeries(LineSeries, { lineWidth: 2 });
+    case "area":
+      return chart.addSeries(AreaSeries, { lineWidth: 2 });
+    case "baseline":
+      return chart.addSeries(BaselineSeries, {});
+    default: // candles | hollow | heikin-ashi
+      return chart.addSeries(CandlestickSeries, { borderVisible: type === "hollow" });
+  }
+}
 
 export function useTradingChart({
   bars,
@@ -166,22 +193,31 @@ export function useTradingChart({
       drop("main");
       mainType.current = chartType;
     }
-    if (!S.get("main")) {
-      S.set(
-        "main",
-        chartType === "candles"
-          ? chart.addSeries(CandlestickSeries, { borderVisible: false })
-          : chart.addSeries(AreaSeries, { lineWidth: 2 }),
-      );
-    }
+    if (!S.get("main")) S.set("main", createMainSeries(chart, chartType));
     const main = S.get("main")!;
-    if (chartType === "candles") {
+    if (CANDLE_LIKE.has(chartType)) {
+      const hollow = chartType === "hollow";
       main.applyOptions({
-        upColor: c.gain,
+        upColor: hollow ? "transparent" : c.gain,
         downColor: c.loss,
         wickUpColor: c.gain,
         wickDownColor: c.loss,
+        borderUpColor: c.gain,
+        borderDownColor: c.loss,
+        borderVisible: hollow,
       });
+      const src = chartType === "heikin-ashi" ? heikinAshi(bars) : bars;
+      main.setData(
+        src.map((b) => ({
+          time: toTime(b.date),
+          open: b.open,
+          high: b.high,
+          low: b.low,
+          close: b.close,
+        })),
+      );
+    } else if (chartType === "bar") {
+      main.applyOptions({ upColor: c.gain, downColor: c.loss });
       main.setData(
         bars.map((b) => ({
           time: toTime(b.date),
@@ -191,11 +227,26 @@ export function useTradingChart({
           close: b.close,
         })),
       );
-    } else {
+    } else if (chartType === "line") {
+      main.applyOptions({ color: c.accent });
+      main.setData(bars.map((b) => ({ time: toTime(b.date), value: b.close })));
+    } else if (chartType === "area") {
       main.applyOptions({
         lineColor: c.accent,
         topColor: withAlpha(c.accent, 51),
         bottomColor: withAlpha(c.accent, 5),
+      });
+      main.setData(bars.map((b) => ({ time: toTime(b.date), value: b.close })));
+    } else {
+      // baseline — split above/below the first close
+      main.applyOptions({
+        baseValue: { type: "price", price: bars[0]?.close ?? 0 },
+        topLineColor: c.gain,
+        bottomLineColor: c.loss,
+        topFillColor1: withAlpha(c.gain, 40),
+        topFillColor2: withAlpha(c.gain, 8),
+        bottomFillColor1: withAlpha(c.loss, 40),
+        bottomFillColor2: withAlpha(c.loss, 8),
       });
       main.setData(bars.map((b) => ({ time: toTime(b.date), value: b.close })));
     }
