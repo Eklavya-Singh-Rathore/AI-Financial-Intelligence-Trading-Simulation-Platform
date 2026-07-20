@@ -1,13 +1,14 @@
 # project_handover.md
 
 > **Single source of truth for resuming development** — self-contained; no prior
-> conversations needed. Last updated: **2026-07-19, Phase 6 SHIPPED**
-> (professional UI redesign, TradingView-grade charting, market expansion,
-> portfolio analytics, floating assistant, Finnhub + Alpha Vantage providers) —
-> merged to `main` at `b839223`, backend deploy `dep-d9e8aajrjlhs73bu2udg` LIVE
-> on Render (Docker build+rollout 08:04:58Z → 08:08:31Z ≈ 3.5 min), Vercel
-> frontend auto-deployed, `/health` reports the Phase 6 model-audit fields,
-> guest→Vercel→Render→Supabase path production-verified end-to-end.
+> conversations needed. Last updated: **2026-07-20, Phase 6.5 Stage 1 committed
+> and pushed (not yet merged)**. Phase 6 remains **SHIPPED and live in
+> production** (merged to `main` at `b839223`, Render deploy
+> `dep-d9e8aajrjlhs73bu2udg` LIVE, Vercel auto-deployed,
+> guest→Vercel→Render→Supabase path production-verified — see §6–7). Phase 6.5
+> (professional chart upgrade: intraday intervals, more chart types, indicators,
+> drawing tools, chart-docked trading, AI overlays) is in active development on
+> branch `claude/phase-6-5-professional-charting`, Stage 1 of 5 done — see §10.
 
 ## 1. What this is
 
@@ -27,18 +28,21 @@ and **evaluates** its own AI quality (`/insights`). Phase 6 layers on a
 charting) and **external data providers** (Finnhub + Alpha Vantage).
 
 - Repo: https://github.com/Eklavya-Singh-Rathore/AI-Financial-Intelligence-Trading-Simulation-Platform
-  — `main` at **`bb99901`** (Phase 5 merge, still the deployed code). Phase 6 is
-  on branch **`claude/phase-6-professional-trading`** (pushed, not yet merged).
+  — `main` at **`1263135`** (Phase 6 merge `b839223` + a handover-doc commit;
+  this is the deployed code). Phase 6.5 is on branch
+  **`claude/phase-6-5-professional-charting`** (pushed, not yet merged), one
+  commit so far: Stage 1 (`eb34bdc`).
 - DB/Auth: Supabase **`ai-stock-prediction`** (`rekoawsoghrjcimknkfz`, ap-south-1, PG 17)
 - **Live** (§7): Vercel frontend · Render backend · HF inference Space · Supabase —
-  all serving the Phase 5 code.
+  all serving the **Phase 6** code (Phase 6.5 is not deployed yet).
 - Docs: **`docs/MASTER_ARCHITECTURE.md`** (start here), `docs/architecture/`
   (7 docs), `docs/adr/` (ADR-0001..0006), `docs/deploy-render.md`,
   `docs/deploy-hf-space.md`, `docs/environment.md`, `README.md`.
 - **Notifications are permanently out of scope** (owner decision, Phase 4).
 - The Phase 5 branch `claude/phase-4-5-deployment-migration-ea8b0e` and the
   Phase 6 branch `claude/phase-6-professional-trading` are both fully merged
-  into `main`. Their worktrees (under `.claude/worktrees/`) can be deleted.
+  into `main` and their worktrees can be deleted. The **active** worktree is
+  now on the Phase 6.5 branch (same path, `.claude/worktrees/phase-4-5-…`).
 
 ## 2. Phase history (all merged on `main`)
 
@@ -54,6 +58,7 @@ charting) and **external data providers** (Finnhub + Alpha Vantage).
 | 4.6 | **Stabilization**: full E2E verification, **Guest Login**, 2 bug fixes, DB hardening (migration 0010), architecture docs (7) + ADRs (5) |
 | 5 | **Intelligence, research & paper trading** (2026-07-17): paper-trading engine + `/simulation` (API+UI), financial research (profiles/statements/earnings), news RAG + chat citations, explainability (+`context_snapshot`), portfolio intelligence, AI evaluation + `/insights`, `docs/MASTER_ARCHITECTURE.md` + ADR-0006, migrations 0011–0013 |
 | 6 | **Professional trading experience & market expansion** (2026-07-19, merge `b839223`): Kronos audit surfaced in `/health`; watchlists (migration 0014); paginated/searchable `/instruments/summary`; curated Nifty-100 catalog + idempotent admin sync + backfill; external-provider abstraction (Finnhub + Alpha Vantage, degrade-to-keyless); whole-market lazy load + durable `ingest_jobs` queue (migration 0015); numpy-only portfolio analytics (VaR/Monte-Carlo/optimization); frontend design system + `components/ui/*`; professional `TradingChart` (persisted lightweight-charts instance, panes, forecast band, trade markers); redesigned dashboard/Portfolio/Simulation; command palette; site-wide floating assistant; design-system polish across agents/insights/chat/login; proxy 204/304 fix |
+| 6.5 *(in progress)* | **Professional trading chart upgrade** — Stage 1 of 5 done (2026-07-20, `eb34bdc`): audited the chart (stays on Lightweight Charts, official TradingView Charting Library needs a license the owner doesn't have), added a multi-interval OHLCV resolver (1m/5m/15m/30m/1H via on-demand yfinance intraday, not persisted; 1D from stored bars; 1W/1M resampled), 10 range presets, 7 chart types (candles/hollow/bar/line/area/baseline/Heikin-Ashi). Remaining: indicator expansion + Volume Profile + presets (Stage 2), drawing tools (Stage 3), chart-docked trading + AI overlays (Stage 4), polish/docs/ship (Stage 5). Design spec: see §10 |
 
 ## 3. Architecture
 
@@ -225,8 +230,10 @@ Users → Vercel frontend → Render backend (slim, no torch) → Supabase
 (needs backend SSE + proxy passthrough) · Reddit / Twitter-X sentiment and
 OpenBB providers (add a `BaseProvider` subclass + key + `PROVIDER_PRIORITY`
 entry) · correlated (covariance-based) Monte-Carlo (current model is per-asset
-GBM) · the official TradingView Charting Library (current charts use
-lightweight-charts; no license was available — swap-in path documented).
+GBM) · the official TradingView Charting Library — **re-audited in Phase 6.5**
+(2026-07-20): still requires a TradingView-granted license the owner doesn't
+have, so the decision to stay on Lightweight Charts was reconfirmed; revisit if
+a license is ever obtained.
 
 **Longer-term:** per-user LLM quotas · prompt registry/versioning · RAG
 document uploads (filings/transcripts — `research_documents.doc_type` is ready)
@@ -235,3 +242,49 @@ document uploads (filings/transcripts — `research_documents.doc_type` is ready
 evaluation harness beyond `/evaluation/summary` · multi-tenant RLS policies if
 SaaS is pursued. *(Notifications: permanently removed. The durable job queue —
 formerly future work — shipped in Phase 6 as `ingest_jobs`.)*
+
+## 10. Phase 6.5 — professional trading chart upgrade (in progress)
+
+**Branch:** `claude/phase-6-5-professional-charting` (off `main` at `1263135`),
+pushed, not yet merged. **Plan file:**
+`C:\Users\Eklavya Singh Rathor\.claude\plans\proud-waddling-eich.md` (brainstorm
+spec + staged implementation plan, both approved by the owner).
+
+**Scope decisions (owner-approved, do not re-litigate without asking):**
+- **Stay on TradingView Lightweight Charts** (custom build), not the official
+  Charting Library — needs a granted license the owner doesn't have.
+- **Intraday data source: yfinance** (free, already a dependency, verified live
+  for NSE `.NS`). The owner supplied three paid keys
+  (`MARKETSTACK_API_KEY`, `ALPHA_VANTAGE_INTRADAY_KEY`, and a duplicate
+  `FINNHUB_API_KEY`) intending them for intraday — **all three return 403 /
+  "premium endpoint" on their free tiers** for intraday specifically (verified
+  live). They're stored in the git-ignored root `.env` and wired into the
+  provider abstraction's capability set for future paid upgrades, but yfinance
+  is the actual intraday source today.
+- **Staged delivery**, 5 stages, each committed + gated + live-verified
+  independently (see the phase-history row above and the plan file for the
+  full per-stage breakdown).
+- **Four scope calls:** Kronos confidence band deferred (real ML/Space change,
+  not charting) · ~11 high-value drawing tools, not all ~30 from the original
+  prompt · intraday fetched on-demand + 60s-cached, **not** persisted to
+  `price_bars` · drawing/indicator presets in localStorage first (no new
+  schema).
+
+**Stage 1 (done, `eb34bdc`):** backend multi-interval OHLCV resolver
+(`app/services/ohlcv.py`) + `interval` param on `/prices` and `/indicators`;
+frontend interval selector (1m/5m/15m/30m/1H/1D/1W/1M), 10 range presets
+(1D…MAX), and 7 chart types (candles/hollow/bar/line/area/baseline/Heikin-Ashi).
+Verified live against real NSE data (5m RSI recomputed over 4256 points, IST
+session timestamps correct) and gated (ruff/mypy, 218+6 backend tests, tsc +
+47 frontend tests + build, all green).
+
+**Remaining stages:** 2 (10 more indicators + Volume Profile + presets), 3
+(drawing-tool canvas engine), 4 (chart-docked order ticket + stop-limit + AI
+research overlays), 5 (polish, docs, full regression, merge, deploy,
+production verification — mirrors the Phase 6 ship playbook in §6–8).
+
+**New env vars (Phase 6.5, local `.env` only so far, not yet in
+`.env.example`/`render.yaml`):** `MARKETSTACK_API_KEY`,
+`ALPHA_VANTAGE_INTRADAY_KEY` (kept distinct from the Phase 6
+`ALPHA_VANTAGE_API_KEY`, which is fundamentals-only). Neither is required —
+document as optional/premium-gated future providers when Stage 5 documents.
