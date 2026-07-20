@@ -3,7 +3,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Bot } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
 import { TradingChart } from "@/components/chart/TradingChart";
 import { ResearchSection } from "@/components/ResearchSection";
@@ -11,6 +11,8 @@ import { WatchlistStar } from "@/components/WatchlistStar";
 import { Button } from "@/components/ui";
 import { api, fmtNum, fmtPct, polarity } from "@/lib/api";
 import { DEFAULT_INTERVAL, isIntradayInterval } from "@/lib/chartIntervals.mjs";
+import { INDICATOR_IDS, backendNames } from "@/lib/indicators";
+import { loadEnabledIndicators, saveEnabledIndicators } from "@/lib/chartPresets.mjs";
 
 const METRIC_LABELS: Record<string, string> = {
   total_return_pct: "Total return",
@@ -34,6 +36,17 @@ export default function InstrumentPage() {
   // Chart interval (Phase 6.5): daily by default; intraday grains fetch from yfinance.
   const [interval, setChartInterval] = useState<string>(DEFAULT_INTERVAL);
   const intraday = isIntradayInterval(interval);
+  // Enabled indicators (Phase 6.5): default set, then hydrate from localStorage.
+  const [enabled, setEnabled] = useState<string[]>(["sma", "rsi"]);
+  useEffect(() => {
+    setEnabled(loadEnabledIndicators(INDICATOR_IDS, ["sma", "rsi"]));
+  }, []);
+  const changeIndicators = (ids: string[]) => {
+    setEnabled(ids);
+    saveEnabledIndicators(ids);
+  };
+  // Always request rsi (for the header badge) plus the enabled indicators.
+  const indicatorNames = backendNames([...new Set(["rsi", ...enabled])]);
 
   // 2000 bars covers the daily 3Y/MAX presets and a full intraday window.
   const prices = useQuery({
@@ -50,8 +63,8 @@ export default function InstrumentPage() {
   });
   const backfilling = track.data && ["queued", "running"].includes(track.data.status);
   const indicators = useQuery({
-    queryKey: ["indicators", symbol, interval],
-    queryFn: () => api.indicators(symbol, "sma,ema,rsi,macd", interval),
+    queryKey: ["indicators", symbol, interval, indicatorNames],
+    queryFn: () => api.indicators(symbol, indicatorNames, interval),
   });
   // Trades for this symbol → buy/sell markers on the chart (memoized so the
   // chart effect doesn't re-run on every render).
@@ -145,6 +158,8 @@ export default function InstrumentPage() {
           trades={symbolTrades}
           interval={interval}
           onIntervalChange={setChartInterval}
+          enabled={enabled}
+          onEnabledChange={changeIndicators}
         />
       </div>
 

@@ -1,10 +1,9 @@
 "use client";
 
-// Persisted TradingView-style chart (Phase 6). The chart instance and its
-// series are created ONCE and updated in place (setData / applyOptions / add /
-// remove) — unlike the old CandleChart which rebuilt everything on every prop
-// change. This keeps the viewport, is cheap at scale, and lets the crosshair
-// legend read live data.
+// Persisted TradingView-style chart (Phase 6, generalized in 6.5). The chart
+// instance and its series are created ONCE and updated in place (setData /
+// applyOptions / add / remove). Indicators are rendered generically from the
+// catalog in lib/indicators.ts.
 import {
   AreaSeries,
   BarSeries,
@@ -14,6 +13,7 @@ import {
   HistogramSeries,
   LineSeries,
   LineStyle,
+  type LineWidth,
   createChart,
   createSeriesMarkers,
   type IChartApi,
@@ -29,6 +29,7 @@ import { chartColors, toTime, withAlpha } from "@/lib/chart";
 import { tradesToMarkers } from "@/lib/chartMarkers.mjs";
 import { visibleRangeFor } from "@/lib/chartRanges.mjs";
 import { heikinAshi } from "@/lib/heikinAshi.mjs";
+import type { IndColor, IndicatorDef } from "@/lib/indicators";
 
 export type ChartType =
   | "candles"
@@ -40,8 +41,6 @@ export type ChartType =
   | "heikin-ashi";
 
 const CANDLE_LIKE = new Set<ChartType>(["candles", "hollow", "heikin-ashi"]);
-export type Overlays = { sma: boolean; ema: boolean; volume: boolean };
-export type Panes = { rsi: boolean; macd: boolean };
 export type TradeMarker = { date: string; side: string; qty: number; price: number };
 
 export type OhlcLegend = {
@@ -57,10 +56,10 @@ export type OhlcLegend = {
 type Args = {
   bars: PriceBar[];
   indicators: IndicatorPoint[];
+  activeIndicators: IndicatorDef[];
+  volume: boolean;
   forecast: ForecastOut | null;
   chartType: ChartType;
-  overlays: Overlays;
-  panes: Panes;
   trades: TradeMarker[];
   showMarkers: boolean;
   height?: number;
@@ -86,10 +85,10 @@ function createMainSeries(chart: IChartApi, type: ChartType): AnySeries {
 export function useTradingChart({
   bars,
   indicators,
+  activeIndicators,
+  volume,
   forecast,
   chartType,
-  overlays,
-  panes,
   trades,
   showMarkers,
   height = 440,
@@ -98,7 +97,8 @@ export function useTradingChart({
   const chartRef = useRef<IChartApi | null>(null);
   const series = useRef<Map<string, AnySeries>>(new Map());
   const mainType = useRef<ChartType | null>(null);
-  const panesKey = useRef<string | null>(null);
+  const indSig = useRef<string | null>(null);
+  const levelsDone = useRef<Set<string>>(new Set());
   const markersApi = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const dataRef = useRef({ bars, indicators });
   const { resolvedTheme } = useTheme();
@@ -131,9 +131,7 @@ export function useTradingChart({
     const onMove = (param: { time?: unknown }) => {
       const bs = dataRef.current.bars;
       if (!bs.length) return;
-      const idx = param.time
-        ? bs.findIndex((b) => toTime(b.date) === param.time)
-        : bs.length - 1;
+      const idx = param.time ? bs.findIndex((b) => toTime(b.date) === param.time) : bs.length - 1;
       const i = idx < 0 ? bs.length - 1 : idx;
       const b = bs[i];
       const prev = bs[i - 1];
@@ -155,7 +153,8 @@ export function useTradingChart({
       chartRef.current = null;
       series.current.clear();
       mainType.current = null;
-      panesKey.current = null;
+      indSig.current = null;
+      levelsDone.current.clear();
       markersApi.current = null;
     };
   }, [height]);
@@ -166,13 +165,12 @@ export function useTradingChart({
     if (!chart || bars.length === 0) return;
     const c = chartColors();
     const S = series.current;
+    const colorOf = (name: IndColor) =>
+      name === "gain" ? c.gain : name === "loss" ? c.loss : name === "ink3" ? c.ink3 : c.accent;
 
     chart.applyOptions({
       layout: { textColor: c.ink3 },
-      grid: {
-        vertLines: { color: c.border },
-        horzLines: { color: c.border },
-      },
+      grid: { vertLines: { color: c.border }, horzLines: { color: c.border } },
       rightPriceScale: { borderColor: c.border },
       timeScale: { borderColor: c.border },
     });
@@ -185,8 +183,7 @@ export function useTradingChart({
       }
     };
 
-    // Main price series — swap type when chartType changes (markers live on it,
-    // so detach them first; they re-attach below on the new series).
+    // Main price series — swap type when chartType changes (markers live on it).
     if (mainType.current !== chartType) {
       markersApi.current?.detach();
       markersApi.current = null;
@@ -208,24 +205,12 @@ export function useTradingChart({
       });
       const src = chartType === "heikin-ashi" ? heikinAshi(bars) : bars;
       main.setData(
-        src.map((b) => ({
-          time: toTime(b.date),
-          open: b.open,
-          high: b.high,
-          low: b.low,
-          close: b.close,
-        })),
+        src.map((b) => ({ time: toTime(b.date), open: b.open, high: b.high, low: b.low, close: b.close })),
       );
     } else if (chartType === "bar") {
       main.applyOptions({ upColor: c.gain, downColor: c.loss });
       main.setData(
-        bars.map((b) => ({
-          time: toTime(b.date),
-          open: b.open,
-          high: b.high,
-          low: b.low,
-          close: b.close,
-        })),
+        bars.map((b) => ({ time: toTime(b.date), open: b.open, high: b.high, low: b.low, close: b.close })),
       );
     } else if (chartType === "line") {
       main.applyOptions({ color: c.accent });
@@ -238,7 +223,6 @@ export function useTradingChart({
       });
       main.setData(bars.map((b) => ({ time: toTime(b.date), value: b.close })));
     } else {
-      // baseline — split above/below the first close
       main.applyOptions({
         baseValue: { type: "price", price: bars[0]?.close ?? 0 },
         topLineColor: c.gain,
@@ -251,8 +235,8 @@ export function useTradingChart({
       main.setData(bars.map((b) => ({ time: toTime(b.date), value: b.close })));
     }
 
-    // Volume histogram (overlaid on its own hidden scale at the bottom).
-    if (overlays.volume) {
+    // Volume histogram on its own hidden scale at the bottom.
+    if (volume) {
       if (!S.get("volume")) {
         S.set(
           "volume",
@@ -275,30 +259,6 @@ export function useTradingChart({
     } else {
       drop("volume");
     }
-
-    // Indicator overlays.
-    const line = (key: string, valueKey: string, color: string, on: boolean) => {
-      if (!on) return drop(key);
-      const data = indicators
-        .filter((p) => p.values[valueKey] != null)
-        .map((p) => ({ time: toTime(p.date), value: p.values[valueKey] as number }));
-      if (!data.length) return drop(key);
-      if (!S.get(key)) {
-        S.set(
-          key,
-          chart.addSeries(LineSeries, {
-            lineWidth: 2,
-            priceLineVisible: false,
-            lastValueVisible: false,
-            crosshairMarkerVisible: false,
-          }),
-        );
-      }
-      S.get(key)!.applyOptions({ color });
-      S.get(key)!.setData(data);
-    };
-    line("sma", "sma_20", c.accent, overlays.sma);
-    line("ema", "ema_20", c.ink3, overlays.ema);
 
     // Forecast projection (dashed, stitched from the last close).
     if (forecast && forecast.points.length) {
@@ -323,72 +283,95 @@ export function useTradingChart({
       drop("forecast");
     }
 
-    // --- indicator sub-panes (RSI / MACD) ---------------------------------
-    // Rebuild pane series only when the enabled set changes, so pane indices
-    // stay gap-free (RSI=1, MACD after it) without empty panes.
-    const key = `${panes.rsi}:${panes.macd}`;
-    if (panesKey.current !== key) {
-      ["rsi", "macd_hist", "macd", "macd_signal"].forEach(drop);
-      panesKey.current = key;
+    // --- indicators (generic, catalog-driven) -----------------------------
+    // Rebuild all indicator series when the enabled set / pane order changes so
+    // pane indices stay gap-free.
+    const sig = activeIndicators.map((d) => d.id).join(",");
+    if (indSig.current !== sig) {
+      [...S.keys()].filter((k) => k.startsWith("ind:")).forEach(drop);
+      levelsDone.current.clear();
+      indSig.current = sig;
     }
-    const rsiPane = 1;
-    const macdPane = panes.rsi ? 2 : 1;
-    const seriesData = (valueKey: string) =>
-      indicators
-        .filter((p) => p.values[valueKey] != null)
-        .map((p) => ({ time: toTime(p.date), value: p.values[valueKey] as number }));
 
-    if (panes.rsi) {
-      if (!S.get("rsi")) {
-        const s = chart.addSeries(
-          LineSeries,
-          { lineWidth: 2, priceLineVisible: false, lastValueVisible: false },
-          rsiPane,
-        );
-        s.createPriceLine({ price: 70, color: c.loss, lineStyle: LineStyle.Dotted, lineWidth: 1 });
-        s.createPriceLine({ price: 30, color: c.gain, lineStyle: LineStyle.Dotted, lineWidth: 1 });
-        S.set("rsi", s);
-      }
-      S.get("rsi")!.applyOptions({ color: c.accent });
-      S.get("rsi")!.setData(seriesData("rsi_14"));
-    }
-    if (panes.macd) {
-      if (!S.get("macd_hist")) {
+    const colData = (col: string) =>
+      indicators
+        .filter((p) => p.values[col] != null)
+        .map((p) => ({ time: toTime(p.date), value: p.values[col] as number }));
+
+    const ensureLine = (key: string, pane: number, width: LineWidth, dashed = false) => {
+      if (!S.get(key)) {
         S.set(
-          "macd_hist",
-          chart.addSeries(
-            HistogramSeries,
-            { priceLineVisible: false, lastValueVisible: false },
-            macdPane,
-          ),
-        );
-        S.set(
-          "macd",
+          key,
           chart.addSeries(
             LineSeries,
-            { lineWidth: 2, priceLineVisible: false, lastValueVisible: false },
-            macdPane,
-          ),
-        );
-        S.set(
-          "macd_signal",
-          chart.addSeries(
-            LineSeries,
-            { lineWidth: 1, priceLineVisible: false, lastValueVisible: false },
-            macdPane,
+            {
+              lineWidth: width,
+              lineStyle: dashed ? LineStyle.Dashed : LineStyle.Solid,
+              priceLineVisible: false,
+              lastValueVisible: false,
+              crosshairMarkerVisible: false,
+            },
+            pane,
           ),
         );
       }
-      const hist = seriesData("macd_hist").map((d) => ({
-        ...d,
-        color: withAlpha(d.value >= 0 ? c.gain : c.loss, 140),
-      }));
-      S.get("macd_hist")!.setData(hist);
-      S.get("macd")!.applyOptions({ color: c.accent });
-      S.get("macd")!.setData(seriesData("macd"));
-      S.get("macd_signal")!.applyOptions({ color: c.ink3 });
-      S.get("macd_signal")!.setData(seriesData("macd_signal"));
-    }
+      return S.get(key)!;
+    };
+
+    const renderIndicator = (def: IndicatorDef, pane: number) => {
+      for (const ln of def.lines ?? []) {
+        const s = ensureLine(`ind:${def.id}:${ln.col}`, pane, (ln.width ?? 2) as LineWidth, ln.dashed);
+        s.applyOptions({ color: colorOf(ln.color) });
+        s.setData(colData(ln.col));
+      }
+      if (def.band) {
+        for (const edge of [def.band.upper, def.band.lower]) {
+          const s = ensureLine(`ind:${def.id}:${edge}`, pane, 1 as LineWidth);
+          s.applyOptions({ color: withAlpha(c.ink3, 160) });
+          s.setData(colData(edge));
+        }
+      }
+      if (def.histogram) {
+        const key = `ind:${def.id}:hist`;
+        if (!S.get(key)) {
+          S.set(
+            key,
+            chart.addSeries(
+              HistogramSeries,
+              { priceLineVisible: false, lastValueVisible: false },
+              pane,
+            ),
+          );
+        }
+        S.get(key)!.setData(
+          colData(def.histogram).map((d) => ({
+            ...d,
+            color: withAlpha(d.value >= 0 ? c.gain : c.loss, 140),
+          })),
+        );
+      }
+      // Reference levels — created once on the first line series of the pane.
+      if (def.levels && def.lines?.[0] && !levelsDone.current.has(def.id)) {
+        const anchor = S.get(`ind:${def.id}:${def.lines[0].col}`);
+        if (anchor) {
+          for (const lv of def.levels) {
+            anchor.createPriceLine({
+              price: lv.value,
+              color: colorOf(lv.color),
+              lineStyle: LineStyle.Dotted,
+              lineWidth: 1,
+            });
+          }
+          levelsDone.current.add(def.id);
+        }
+      }
+    };
+
+    for (const def of activeIndicators.filter((d) => !d.pane)) renderIndicator(def, 0);
+    activeIndicators
+      .filter((d) => d.pane)
+      .forEach((def, k) => renderIndicator(def, k + 1));
+
     // Give the price pane the bulk of the height, sub-panes a slim share.
     const paneApis = chart.panes();
     paneApis[0]?.setStretchFactor(4);
@@ -396,17 +379,15 @@ export function useTradingChart({
 
     // --- trade markers on the price series --------------------------------
     if (showMarkers && trades.length) {
-      const main2 = S.get("main");
-      if (main2) {
-        if (!markersApi.current) markersApi.current = createSeriesMarkers(main2, []);
-        markersApi.current.setMarkers(
-          tradesToMarkers(trades, { gain: c.gain, loss: c.loss }) as never,
-        );
+      const m = S.get("main");
+      if (m) {
+        if (!markersApi.current) markersApi.current = createSeriesMarkers(m, []);
+        markersApi.current.setMarkers(tradesToMarkers(trades, { gain: c.gain, loss: c.loss }) as never);
       }
     } else {
       markersApi.current?.setMarkers([]);
     }
-  }, [bars, indicators, forecast, chartType, overlays, panes, trades, showMarkers, resolvedTheme]);
+  }, [bars, indicators, activeIndicators, volume, forecast, chartType, trades, showMarkers, resolvedTheme]);
 
   const setRange = useCallback((preset: string) => {
     const chart = chartRef.current;

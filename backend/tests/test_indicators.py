@@ -5,7 +5,24 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
-from app.services.indicators import bollinger, compute_indicators, ema, macd, rsi, sma
+from app.services.indicators import (
+    adx,
+    atr,
+    bollinger,
+    cci,
+    compute_indicators,
+    donchian,
+    ema,
+    ichimoku,
+    macd,
+    obv,
+    psar,
+    rsi,
+    sma,
+    stoch_rsi,
+    supertrend,
+    vwap,
+)
 
 
 def test_sma_known_values():
@@ -72,3 +89,96 @@ def test_compute_indicators_dispatch(price_df):
 def test_compute_indicators_requires_close():
     with pytest.raises(ValueError, match="close"):
         compute_indicators(pd.DataFrame({"open": [1.0]}), ["sma"])
+
+
+# --- Phase 6.5 indicators --------------------------------------------------
+def test_atr_positive(price_df):
+    out = atr(price_df["high"], price_df["low"], price_df["close"]).dropna()
+    assert len(out) > 0
+    assert (out > 0).all()
+
+
+def test_adx_bounded_and_columns(price_df):
+    out = adx(price_df["high"], price_df["low"], price_df["close"])
+    assert list(out.columns) == ["adx_14", "plus_di_14", "minus_di_14"]
+    a = out["adx_14"].dropna()
+    assert ((a >= 0) & (a <= 100)).all()
+
+
+def test_stoch_rsi_bounded(price_df):
+    out = stoch_rsi(price_df["close"]).dropna()
+    assert ((out["stochrsi_k"] >= -1e-6) & (out["stochrsi_k"] <= 100 + 1e-6)).all()
+
+
+def test_cci_finite(price_df):
+    out = cci(price_df["high"], price_df["low"], price_df["close"]).dropna()
+    assert len(out) > 0
+    assert np.isfinite(out).all()
+
+
+def test_obv_is_running_signed_volume():
+    close = pd.Series([10.0, 11.0, 10.5, 12.0])
+    volume = pd.Series([100.0, 200.0, 300.0, 400.0])
+    out = obv(close, volume)
+    # diffs: nan->0, +1, -1, +1 → 0, +200, -300, +400 cumsum
+    assert out.tolist() == [0.0, 200.0, -100.0, 300.0]
+
+
+def test_donchian_ordering(price_df):
+    out = donchian(price_df["high"], price_df["low"]).dropna()
+    assert (out["donchian_upper"] >= out["donchian_mid"]).all()
+    assert (out["donchian_mid"] >= out["donchian_lower"]).all()
+
+
+def test_ichimoku_columns(price_df):
+    out = ichimoku(price_df["high"], price_df["low"])
+    assert set(out.columns) == {
+        "ichimoku_tenkan",
+        "ichimoku_kijun",
+        "ichimoku_senkou_a",
+        "ichimoku_senkou_b",
+    }
+
+
+def test_vwap_equals_typical_price_on_daily(price_df):
+    # Daily bars: one bar per day, so session-cumulative VWAP == typical price.
+    out = vwap(price_df["high"], price_df["low"], price_df["close"], price_df["volume"])
+    tp = (price_df["high"] + price_df["low"] + price_df["close"]) / 3.0
+    assert (out - tp).abs().max() < 1e-6
+
+
+def test_supertrend_and_psar_produce_finite_values_in_range(price_df):
+    st = supertrend(price_df["high"], price_df["low"], price_df["close"]).dropna()
+    sar = psar(price_df["high"], price_df["low"]).dropna()
+    assert len(st) > 0 and len(sar) > 0
+    lo, hi = price_df["low"].min() - 5, price_df["high"].max() + 5
+    assert ((st >= lo) & (st <= hi)).all()
+    assert ((sar >= lo) & (sar <= hi)).all()
+
+
+def test_compute_indicators_new_dispatch(price_df):
+    names = ["vwap", "atr", "supertrend", "adx", "stochrsi", "cci"]
+    names += ["obv", "psar", "donchian", "ichimoku"]
+    out = compute_indicators(price_df, names)
+    expected = {
+        "vwap",
+        "atr_14",
+        "supertrend",
+        "adx_14",
+        "plus_di_14",
+        "minus_di_14",
+        "stochrsi_k",
+        "stochrsi_d",
+        "cci_20",
+        "obv",
+        "psar",
+        "donchian_upper",
+        "donchian_mid",
+        "donchian_lower",
+        "ichimoku_tenkan",
+        "ichimoku_kijun",
+        "ichimoku_senkou_a",
+        "ichimoku_senkou_b",
+    }
+    assert expected == set(out.columns)
+    assert len(out) == len(price_df)

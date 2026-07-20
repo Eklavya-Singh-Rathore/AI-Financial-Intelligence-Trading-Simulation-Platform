@@ -1,15 +1,14 @@
 "use client";
 
-import { Maximize2, Minimize2 } from "lucide-react";
+import { ChevronDown, Maximize2, Minimize2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ForecastOut, IndicatorPoint, PriceBar } from "@/lib/api";
 import { fmtNum, fmtPct, polarity } from "@/lib/api";
 import { INTERVALS, defaultRangeForInterval, rangesForInterval } from "@/lib/chartIntervals.mjs";
+import { INDICATORS, enabledDefs } from "@/lib/indicators";
 import { cn } from "@/lib/ui";
 import {
   type ChartType,
-  type Overlays,
-  type Panes,
   type TradeMarker,
   useTradingChart,
 } from "./useTradingChart";
@@ -52,6 +51,62 @@ function Toggle({
 
 const Sep = () => <span className="mx-1 h-4 w-px shrink-0 bg-line" />;
 
+function IndicatorPicker({
+  enabled,
+  onChange,
+}: {
+  enabled: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const set = new Set(enabled);
+  const toggle = (id: string) => {
+    const next = new Set(set);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    onChange(INDICATORS.filter((i) => next.has(i.id)).map((i) => i.id));
+  };
+  const overlays = INDICATORS.filter((i) => !i.pane);
+  const panes = INDICATORS.filter((i) => i.pane);
+
+  const Group = ({ title, defs }: { title: string; defs: typeof INDICATORS }) => (
+    <div className="min-w-[9rem]">
+      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-ink-3">{title}</div>
+      {defs.map((d) => (
+        <label
+          key={d.id}
+          className="flex cursor-pointer items-center gap-1.5 rounded px-1 py-0.5 text-xs text-ink-2 hover:bg-surface-2"
+        >
+          <input type="checkbox" checked={set.has(d.id)} onChange={() => toggle(d.id)} className="accent-accent" />
+          {d.label}
+        </label>
+      ))}
+    </div>
+  );
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1 rounded px-1.5 py-1 text-xs font-medium text-ink-2 hover:bg-surface-2 hover:text-ink"
+      >
+        Indicators{enabled.length > 0 && <span className="text-accent">({enabled.length})</span>}
+        <ChevronDown size={12} />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} aria-hidden />
+          <div className="absolute left-0 top-full z-20 mt-1 flex gap-4 rounded-md border border-line bg-surface p-3 shadow-md">
+            <Group title="Overlays" defs={overlays} />
+            <Group title="Oscillators" defs={panes} />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function TradingChart({
   bars,
   indicators,
@@ -59,6 +114,8 @@ export function TradingChart({
   trades = [],
   interval,
   onIntervalChange,
+  enabled,
+  onEnabledChange,
   height = 440,
 }: {
   bars: PriceBar[];
@@ -67,11 +124,12 @@ export function TradingChart({
   trades?: TradeMarker[];
   interval: string;
   onIntervalChange: (interval: string) => void;
+  enabled: string[];
+  onEnabledChange: (ids: string[]) => void;
   height?: number;
 }) {
   const [chartType, setChartType] = useState<ChartType>("candles");
-  const [overlays, setOverlays] = useState<Overlays>({ sma: true, ema: false, volume: true });
-  const [panes, setPanes] = useState<Panes>({ rsi: false, macd: false });
+  const [volume, setVolume] = useState(true);
   const [showMarkers, setShowMarkers] = useState(true);
   const [range, setRange] = useState<string>(() => defaultRangeForInterval(interval));
 
@@ -81,21 +139,19 @@ export function TradingChart({
   const { containerRef, legend, setRange: applyRange } = useTradingChart({
     bars,
     indicators,
+    activeIndicators: enabledDefs(enabled),
+    volume,
     forecast,
     chartType,
-    overlays,
-    panes,
     trades,
     showMarkers,
     height,
   });
 
   const hasData = bars.length > 0;
-  // Switching interval → reset to that interval's default range window.
   useEffect(() => {
     setRange(defaultRangeForInterval(interval));
   }, [interval]);
-  // Apply the range window whenever it or the underlying data changes.
   useEffect(() => {
     if (hasData) applyRange(range);
   }, [range, hasData, applyRange, bars]);
@@ -109,9 +165,6 @@ export function TradingChart({
     if (document.fullscreenElement) document.exitFullscreen();
     else cardRef.current?.requestFullscreen?.();
   };
-
-  const toggleOverlay = (k: keyof Overlays) => setOverlays((o) => ({ ...o, [k]: !o[k] }));
-  const togglePane = (k: keyof Panes) => setPanes((p) => ({ ...p, [k]: !p[k] }));
   const ranges = rangesForInterval(interval);
 
   return (
@@ -119,7 +172,6 @@ export function TradingChart({
       {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-2.5 py-1.5">
         <div className="flex flex-wrap items-center gap-1">
-          {/* Interval */}
           <div className="flex items-center rounded-md border border-line p-0.5">
             {INTERVALS.map((iv) => (
               <Toggle key={iv.id} active={interval === iv.id} onClick={() => onIntervalChange(iv.id)}>
@@ -128,7 +180,6 @@ export function TradingChart({
             ))}
           </div>
           <Sep />
-          {/* Chart type */}
           <select
             value={chartType}
             onChange={(e) => setChartType(e.target.value as ChartType)}
@@ -142,21 +193,9 @@ export function TradingChart({
             ))}
           </select>
           <Sep />
-          <Toggle active={overlays.sma} onClick={() => toggleOverlay("sma")} title="20-period simple MA">
-            SMA
-          </Toggle>
-          <Toggle active={overlays.ema} onClick={() => toggleOverlay("ema")} title="20-period exponential MA">
-            EMA
-          </Toggle>
-          <Toggle active={overlays.volume} onClick={() => toggleOverlay("volume")} title="Volume">
+          <IndicatorPicker enabled={enabled} onChange={onEnabledChange} />
+          <Toggle active={volume} onClick={() => setVolume((v) => !v)} title="Volume">
             Vol
-          </Toggle>
-          <Sep />
-          <Toggle active={panes.rsi} onClick={() => togglePane("rsi")} title="RSI pane">
-            RSI
-          </Toggle>
-          <Toggle active={panes.macd} onClick={() => togglePane("macd")} title="MACD pane">
-            MACD
           </Toggle>
           {trades.length > 0 && (
             <Toggle active={showMarkers} onClick={() => setShowMarkers((m) => !m)} title="Trade markers">
@@ -205,7 +244,6 @@ export function TradingChart({
             <span className="tabular text-ink-3">Vol {fmtNum(legend.volume, 0)}</span>
           </div>
         )}
-        {/* Container is ALWAYS mounted so the create-once effect can attach. */}
         <div ref={containerRef} className="w-full" style={{ height: isFs ? "100%" : height }} />
         {!hasData && (
           <div className="absolute inset-0 flex items-center justify-center text-sm text-ink-3">
