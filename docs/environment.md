@@ -97,6 +97,15 @@ ship in `.env.example` / `render.yaml` (`sync: false`).
 | `ALPHA_VANTAGE_API_KEY` | *(empty)* | **yes** | local, Render (`sync: false`) | Alpha Vantage — company-overview fallback for research profiles. Absent = provider skipped |
 | `ALPHA_VANTAGE_DAILY_CAP` | `20` | no | rarely | soft request budget per day (free tier hard limit is 25); the provider stops calling past this |
 | `PROVIDER_PRIORITY` | `yfinance,finnhub,alpha_vantage,newsapi` | no | rarely | comma-separated order the registry tries providers, left-to-right, per capability |
+| `MARKETSTACK_API_KEY` | *(empty)* | **yes** | local only | Reserved intraday provider (Phase 6.5). **Free tier is EOD-only** — intraday needs a paid plan. Not wired to a live path; kept for a future paid upgrade |
+| `ALPHA_VANTAGE_INTRADAY_KEY` | *(empty)* | **yes** | local only | Reserved Alpha-Vantage key for intraday (Phase 6.5). **Alpha Vantage intraday is a premium endpoint** on the free tier. Not wired to a live path |
+
+**Phase 6.5 intraday note:** the chart's intraday intervals (1m/5m/15m/30m/1H)
+are served by **keyless yfinance** (`app/services/ohlcv.py`, on-demand + 60s
+cached, not persisted). The three keys the owner supplied for intraday
+(`MARKETSTACK_API_KEY`, `ALPHA_VANTAGE_INTRADAY_KEY`, and Finnhub) all gate
+intraday behind paid plans, so they're stored for a future upgrade but the
+platform uses yfinance today.
 
 ## Market expansion (Phase 6)
 

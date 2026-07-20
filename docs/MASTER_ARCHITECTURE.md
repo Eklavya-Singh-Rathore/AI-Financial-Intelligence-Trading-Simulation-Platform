@@ -1,7 +1,7 @@
 # Master Architecture
 
 **AI Financial Intelligence Trading Simulation Platform** — the complete
-system reference as of Phase 6. One document, top to bottom; per-area deep
+system reference as of Phase 6.5. One document, top to bottom; per-area deep
 dives live in [`docs/architecture/`](architecture/) and decisions in
 [`docs/adr/`](adr/).
 
@@ -15,9 +15,13 @@ recommendations, lets users **paper-trade** them (human-in-the-loop, never
 auto-executed), computes **portfolio analytics** (VaR / Monte-Carlo /
 optimization), grounds a chat assistant (full page + a site-wide floating dock)
 in market data + persisted news with citations, and measures its own AI
-quality. Phase 6 also brings a **professional UI redesign** (design tokens +
+quality. Phase 6 brings a **professional UI redesign** (design tokens +
 component library, TradingView-grade charting) and **external data providers**
-(Finnhub + Alpha Vantage behind a capability abstraction).
+(Finnhub + Alpha Vantage behind a capability abstraction). **Phase 6.5** turns
+the chart into a trading workstation: intraday intervals (yfinance, on-demand),
+7 chart types, 15 indicators + Volume Profile, a canvas drawing-tools engine
+(trend/ray/rectangle/fib/measure/text + persistence), a chart-docked order
+ticket (incl. stop-limit), and support/resistance + AI-recommendation overlays.
 
 ## 1. Production topology
 
@@ -257,7 +261,7 @@ the existing chat RAG grounds the answer — no backend change. A Cmd/Ctrl-K
 ## 4. Database
 
 Supabase Postgres 17 + pgvector; async SQLAlchemy 2 + asyncpg. Alembic head:
-**`0015_ingest_jobs`**. RLS is enabled deny-by-default on every public table
+**`0016_stop_limit`**. RLS is enabled deny-by-default on every public table
 (locks the auto-generated REST API); the backend connects as `postgres` and
 enforces ownership in application code.
 
@@ -271,7 +275,7 @@ enforces ownership in application code.
 
 Migration chain: `0004_warehouse` → … → **`0011_simulation`** →
 **`0012_research`** → **`0013_run_context`** → **`0014_watchlists`** →
-**`0015_ingest_jobs`**. Applied manually (`alembic upgrade head`); CI proves
+**`0016_stop_limit`**. Applied manually (`alembic upgrade head`); CI proves
 the full chain on vanilla Postgres (`pgvector/pgvector:pg17`).
 
 ## 5. Auth & multi-user isolation

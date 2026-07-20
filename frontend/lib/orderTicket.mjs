@@ -6,7 +6,7 @@
  * latest close. Null when the driving price/qty is unknown.
  */
 export function estimatedCost(orderType, qty, lastPrice, limitPrice) {
-  const price = orderType === "limit" ? limitPrice : lastPrice;
+  const price = orderType === "limit" || orderType === "stop_limit" ? limitPrice : lastPrice;
   if (!price || !qty || qty < 1) return null;
   return price * qty;
 }
@@ -29,6 +29,8 @@ export function validateOrder({
     return { ok: false, reason: "limit price required", cost };
   if (orderType === "stop" && !(stopPrice > 0))
     return { ok: false, reason: "stop price required", cost };
+  if (orderType === "stop_limit" && !(limitPrice > 0 && stopPrice > 0))
+    return { ok: false, reason: "limit and stop prices required", cost };
   if (side === "buy" && cost != null && buyingPower != null && cost > buyingPower)
     return { ok: false, reason: "estimated cost exceeds buying power", cost };
   return { ok: true, cost };

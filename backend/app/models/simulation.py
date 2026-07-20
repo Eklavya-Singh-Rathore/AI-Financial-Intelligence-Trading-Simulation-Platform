@@ -30,7 +30,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base
 
 ORDER_SIDES = ("buy", "sell")
-ORDER_TYPES = ("market", "limit", "stop")
+ORDER_TYPES = ("market", "limit", "stop", "stop_limit")
 ORDER_STATUSES = ("proposed", "open", "filled", "cancelled", "rejected")
 ORDER_SOURCES = ("manual", "ai")
 
@@ -70,7 +70,7 @@ class SimOrder(Base):
     )
     symbol: Mapped[str] = mapped_column(String(32), nullable=False)
     side: Mapped[str] = mapped_column(String(4), nullable=False)  # buy | sell
-    order_type: Mapped[str] = mapped_column(String(8), nullable=False)  # market | limit | stop
+    order_type: Mapped[str] = mapped_column(String(16), nullable=False)  # see ORDER_TYPES
     qty: Mapped[int] = mapped_column(Integer, nullable=False)
     limit_price: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
     stop_price: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)

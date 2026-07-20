@@ -30,13 +30,25 @@ rebuild-on-every-render `CandleChart`), `assistant/AssistantDock`,
 lives in `lib/*.mjs` with `node:test` coverage; API layer in `lib/api.ts`;
 Supabase browser client in `lib/supabase.ts`.
 
-**Charting.** All chart wiring is isolated in `components/chart/` — the
-`useTradingChart` hook creates the lightweight-charts instance once and
-reconciles series from data (the persisted-instance pattern), and `TradingChart`
-owns the toolbar/overlays. Pages only pass data + config. lightweight-charts was
-chosen because no TradingView **Charting Library** license was available;
-swapping to the official library later is a change confined to this folder — the
-page contract (props in, chart out) does not move. (Deferred, Phase 6.)
+**Charting (Phase 6.5 trading workstation).** All chart wiring is isolated in
+`components/chart/` — the `useTradingChart` hook creates the lightweight-charts
+instance once and reconciles series from data (the persisted-instance pattern);
+`TradingChart` owns the toolbar. lightweight-charts was chosen because no
+TradingView **Charting Library** license was available (re-audited in Phase 6.5,
+still unavailable). Phase 6.5 adds: **intervals** 1m–1M (intraday from yfinance
+via the backend `ohlcv` resolver, on-demand + cached; daily stored; W/M
+resampled — `lib/chartIntervals.mjs`); **7 chart types** (candles/hollow/bar/
+line/area/baseline/Heikin-Ashi); a **data-driven indicator catalog**
+(`lib/indicators.ts`) rendered generically (overlays on the price pane,
+oscillators in sub-panes, bands/histograms/reference-levels) with a picker +
+localStorage presets (`lib/chartPresets.mjs`); a **canvas drawing engine**
+(`DrawingCanvas.tsx` + `lib/chartDrawings.mjs`) that maps data-space anchors to
+pixels via the chart's coordinate converters and redraws on pan/zoom — trend
+line, ray, horizontal/vertical, rectangle, Fibonacci, measure, text; select/
+move/delete, undo/redo, per-symbol persistence; a **Volume Profile** overlay;
+and **support/resistance + AI overlays** (`lib/supportResistance.mjs`). The
+instrument page also docks the paper-trading **order ticket** (market/limit/
+stop/stop-limit) beside the chart.
 
 ## The authenticated backend proxy
 

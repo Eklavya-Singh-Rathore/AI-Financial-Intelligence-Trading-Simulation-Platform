@@ -64,6 +64,30 @@ def test_buy_stop_gap_up_fills_at_open():
     assert price == Decimal("125")
 
 
+# --- stop-limit (Phase 6.5) --------------------------------------------------
+def test_buy_stop_limit_fills_when_stop_hit_and_limit_reachable():
+    # stop=120 (high 121 triggers), limit=122 (low 119 <= 122 reachable)
+    price = trigger_fill_price(
+        "buy", "stop_limit", Decimal("122"), Decimal("120"), bar(119, 121, 119, 120)
+    )
+    assert price == Decimal("119")  # min(open=119, limit=122)
+
+
+def test_buy_stop_limit_no_fill_when_stop_not_triggered():
+    price = trigger_fill_price(
+        "buy", "stop_limit", Decimal("122"), Decimal("120"), bar(110, 115, 109, 112)
+    )
+    assert price is None
+
+
+def test_sell_stop_limit_fills_when_stop_hit_and_limit_reachable():
+    # stop=90 (low 89 triggers), limit=88 (high 91 >= 88 reachable)
+    price = trigger_fill_price(
+        "sell", "stop_limit", Decimal("88"), Decimal("90"), bar(91, 91, 89, 90)
+    )
+    assert price == Decimal("91")  # max(open=91, limit=88)
+
+
 def test_stop_loss_sell_triggers_when_low_crosses_stop():
     price = trigger_fill_price("sell", "stop", None, Decimal("90"), bar(92, 93, 89, 91))
     assert price == Decimal("90")  # min(open=92, stop=90)

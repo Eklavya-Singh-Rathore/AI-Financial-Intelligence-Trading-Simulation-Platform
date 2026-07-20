@@ -1,18 +1,21 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { Bot } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
 import { TradingChart } from "@/components/chart/TradingChart";
 import { ResearchSection } from "@/components/ResearchSection";
+import { OrderTicket } from "@/components/sim/OrderTicket";
 import { WatchlistStar } from "@/components/WatchlistStar";
-import { Button } from "@/components/ui";
+import { Badge, Button, Card, CardBody, CardHeader, CardTitle } from "@/components/ui";
 import { api, fmtNum, fmtPct, polarity } from "@/lib/api";
 import { DEFAULT_INTERVAL, isIntradayInterval } from "@/lib/chartIntervals.mjs";
 import { INDICATOR_IDS, backendNames } from "@/lib/indicators";
 import { loadEnabledIndicators, saveEnabledIndicators } from "@/lib/chartPresets.mjs";
+import { supportResistance } from "@/lib/supportResistance.mjs";
 
 const METRIC_LABELS: Record<string, string> = {
   total_return_pct: "Total return",
@@ -27,6 +30,7 @@ export default function InstrumentPage() {
   const { symbol: raw } = useParams<{ symbol: string }>();
   const symbol = decodeURIComponent(raw);
   const router = useRouter();
+  const qc = useQueryClient();
   // Phase 6: Kronos is the default forecaster and shows on load (users can
   // still switch to baseline or hide it). First call per idle symbol rides the
   // Space wake-up, covered by the proxy maxDuration + keepalive.
@@ -47,6 +51,8 @@ export default function InstrumentPage() {
   };
   // Always request rsi (for the header badge) plus the enabled indicators.
   const indicatorNames = backendNames([...new Set(["rsi", ...enabled])]);
+  // Chart overlays + docked trading (Phase 6.5).
+  const [showSR, setShowSR] = useState(false);
 
   // 2000 bars covers the daily 3Y/MAX presets and a full intraday window.
   const prices = useQuery({
@@ -93,6 +99,20 @@ export default function InstrumentPage() {
 
   const rsiLast = indicators.data?.points.at(-1)?.values["rsi_14"];
   const watchlists = useQuery({ queryKey: ["watchlists"], queryFn: api.watchlists });
+  const portfolio = useQuery({ queryKey: ["sim", "portfolio"], queryFn: api.simPortfolio });
+  const runs = useQuery({ queryKey: ["runs"], queryFn: api.runs, staleTime: 30_000 });
+  const latestRun = (runs.data ?? []).find((r) => r.symbol === symbol && r.status === "completed");
+  const aiDecision = latestRun?.final_decision as
+    | { action?: string; size_pct?: number; confidence?: number; summary?: string }
+    | undefined;
+  const srLevels = useMemo(() => {
+    if (!showSR) return [];
+    return supportResistance(prices.data?.bars ?? [], { window: 5, max: 3 }).map((l) => ({
+      price: l.price,
+      label: l.kind === "resistance" ? "R" : "S",
+      color: (l.kind === "resistance" ? "loss" : "gain") as "loss" | "gain",
+    }));
+  }, [showSR, prices.data]);
 
   return (
     <div className="space-y-5">
@@ -151,6 +171,10 @@ export default function InstrumentPage() {
             )}
           </div>
         )}
+        <label className="flex w-fit items-center gap-1.5 text-sm text-ink-2">
+          <input type="checkbox" checked={showSR} onChange={(e) => setShowSR(e.target.checked)} />
+          Support / resistance overlay
+        </label>
         <TradingChart
           bars={prices.data?.bars ?? []}
           indicators={indicators.data?.points ?? []}
@@ -160,7 +184,62 @@ export default function InstrumentPage() {
           onIntervalChange={setChartInterval}
           enabled={enabled}
           onEnabledChange={changeIndicators}
+          symbol={symbol}
+          levels={srLevels}
         />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Trade {symbol}</CardTitle>
+            <span className="text-[11px] text-ink-3">paper · market/limit/stop/stop-limit</span>
+          </CardHeader>
+          <CardBody>
+            <OrderTicket
+              buyingPower={portfolio.data?.buying_power}
+              defaultSymbol={symbol}
+              onDone={() => qc.invalidateQueries({ queryKey: ["sim"] })}
+            />
+          </CardBody>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>AI view</CardTitle>
+            {latestRun && (
+              <Link href={`/agents/${latestRun.id}`} className="text-xs text-accent hover:underline">
+                latest run →
+              </Link>
+            )}
+          </CardHeader>
+          <CardBody>
+            {aiDecision?.action ? (
+              <div className="space-y-2 text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge
+                    tone={aiDecision.action === "BUY" ? "gain" : aiDecision.action === "SELL" ? "loss" : "neutral"}
+                  >
+                    {aiDecision.action}
+                    {aiDecision.action !== "HOLD" && aiDecision.size_pct ? ` ${aiDecision.size_pct}%` : ""}
+                  </Badge>
+                  {aiDecision.confidence != null && (
+                    <span className="text-xs text-ink-3">confidence {Math.round(aiDecision.confidence * 100)}%</span>
+                  )}
+                </div>
+                {aiDecision.summary && <p className="leading-relaxed text-ink-2">{aiDecision.summary}</p>}
+                <p className="text-[11px] text-ink-3">
+                  Toggle the support/resistance overlay above; the multi-agent decision is a
+                  recommendation, not auto-executed.
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm text-ink-3">
+                No completed agent run for {symbol} yet — use “Analyze with agents” above to generate a
+                recommendation.
+              </p>
+            )}
+          </CardBody>
+        </Card>
       </div>
 
       <div className="rounded-lg border border-line p-4">

@@ -1,17 +1,46 @@
 "use client";
 
-import { ChevronDown, Maximize2, Minimize2 } from "lucide-react";
+import {
+  ChevronDown,
+  type LucideIcon,
+  Maximize2,
+  Minimize2,
+  Minus,
+  MousePointer2,
+  MoveRight,
+  PenLine,
+  Redo2,
+  Ruler,
+  Spline,
+  Square,
+  Trash2,
+  Type as TypeIcon,
+  Undo2,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ForecastOut, IndicatorPoint, PriceBar } from "@/lib/api";
 import { fmtNum, fmtPct, polarity } from "@/lib/api";
 import { INTERVALS, defaultRangeForInterval, rangesForInterval } from "@/lib/chartIntervals.mjs";
+import { loadDrawings, saveDrawings } from "@/lib/chartDrawings.mjs";
 import { INDICATORS, enabledDefs } from "@/lib/indicators";
 import { cn } from "@/lib/ui";
+import { DrawingCanvas, type Drawing, type DrawTool } from "./DrawingCanvas";
 import {
   type ChartType,
   type TradeMarker,
   useTradingChart,
 } from "./useTradingChart";
+
+const DRAW_TOOLS: { id: DrawTool; label: string; Icon: LucideIcon }[] = [
+  { id: "select", label: "Select / move / delete", Icon: MousePointer2 },
+  { id: "trendline", label: "Trend line", Icon: PenLine },
+  { id: "horizontal", label: "Horizontal line", Icon: Minus },
+  { id: "ray", label: "Ray", Icon: MoveRight },
+  { id: "rectangle", label: "Rectangle", Icon: Square },
+  { id: "fib", label: "Fibonacci retracement", Icon: Spline },
+  { id: "measure", label: "Measure", Icon: Ruler },
+  { id: "text", label: "Text label", Icon: TypeIcon },
+];
 
 const CHART_TYPES: { id: ChartType; label: string }[] = [
   { id: "candles", label: "Candles" },
@@ -116,6 +145,8 @@ export function TradingChart({
   onIntervalChange,
   enabled,
   onEnabledChange,
+  symbol,
+  levels = [],
   height = 440,
 }: {
   bars: PriceBar[];
@@ -126,6 +157,8 @@ export function TradingChart({
   onIntervalChange: (interval: string) => void;
   enabled: string[];
   onEnabledChange: (ids: string[]) => void;
+  symbol: string;
+  levels?: { price: number; label: string; color: "gain" | "loss" | "accent" }[];
   height?: number;
 }) {
   const [chartType, setChartType] = useState<ChartType>("candles");
@@ -133,10 +166,73 @@ export function TradingChart({
   const [showMarkers, setShowMarkers] = useState(true);
   const [range, setRange] = useState<string>(() => defaultRangeForInterval(interval));
 
+  // Drawings (Phase 6.5) — per-symbol, persisted, with an undo/redo stack.
+  const [tool, setTool] = useState<DrawTool | null>(null);
+  const [drawings, setDrawings] = useState<Drawing[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [showVP, setShowVP] = useState(false);
+  const history = useRef<Drawing[][]>([[]]);
+  const histIdx = useRef(0);
+
+  useEffect(() => {
+    const d = loadDrawings(symbol) as Drawing[];
+    setDrawings(d);
+    history.current = [d];
+    histIdx.current = 0;
+    setSelectedId(null);
+    setTool(null);
+  }, [symbol]);
+
+  const commit = (next: Drawing[]) => {
+    history.current = history.current.slice(0, histIdx.current + 1);
+    history.current.push(next);
+    histIdx.current = history.current.length - 1;
+    setDrawings(next);
+    saveDrawings(symbol, next);
+  };
+  const handleDrawingChange = (next: Drawing[], doCommit: boolean) => {
+    if (doCommit) commit(next);
+    else setDrawings(next); // live drag preview — not pushed to history
+  };
+  const undo = () => {
+    if (histIdx.current > 0) {
+      histIdx.current -= 1;
+      const d = history.current[histIdx.current];
+      setDrawings(d);
+      saveDrawings(symbol, d);
+      setSelectedId(null);
+    }
+  };
+  const redo = () => {
+    if (histIdx.current < history.current.length - 1) {
+      histIdx.current += 1;
+      const d = history.current[histIdx.current];
+      setDrawings(d);
+      saveDrawings(symbol, d);
+    }
+  };
+  const deleteSelected = () => {
+    if (!selectedId) return;
+    commit(drawings.filter((d) => d.id !== selectedId));
+    setSelectedId(null);
+  };
+  // Delete key removes the selected drawing.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.key === "Delete" || e.key === "Backspace") && selectedId) {
+        e.preventDefault();
+        deleteSelected();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId, drawings]);
+
   const cardRef = useRef<HTMLDivElement>(null);
   const [isFs, setIsFs] = useState(false);
 
-  const { containerRef, legend, setRange: applyRange } = useTradingChart({
+  const { containerRef, legend, setRange: applyRange, chartRef, getMain } = useTradingChart({
     bars,
     indicators,
     activeIndicators: enabledDefs(enabled),
@@ -197,6 +293,9 @@ export function TradingChart({
           <Toggle active={volume} onClick={() => setVolume((v) => !v)} title="Volume">
             Vol
           </Toggle>
+          <Toggle active={showVP} onClick={() => setShowVP((v) => !v)} title="Volume Profile">
+            VP
+          </Toggle>
           {trades.length > 0 && (
             <Toggle active={showMarkers} onClick={() => setShowMarkers((m) => !m)} title="Trade markers">
               Trades
@@ -221,8 +320,43 @@ export function TradingChart({
         </div>
       </div>
 
-      {/* Chart + crosshair legend */}
+      {/* Chart + crosshair legend + drawing overlay */}
       <div className={cn("relative", isFs && "flex-1")}>
+        {/* Drawing tool rail */}
+        <div className="absolute left-1 top-1 z-30 flex flex-col gap-0.5 rounded-md border border-line bg-surface/95 p-0.5 shadow-xs">
+          {DRAW_TOOLS.map(({ id, label, Icon }) => (
+            <button
+              key={id}
+              type="button"
+              title={label}
+              onClick={() => setTool((t) => (t === id ? null : id))}
+              className={cn(
+                "rounded p-1 transition-colors",
+                tool === id ? "bg-accent/10 text-accent" : "text-ink-3 hover:bg-surface-2 hover:text-ink",
+              )}
+            >
+              <Icon size={14} />
+            </button>
+          ))}
+          <span className="my-0.5 h-px w-full bg-line" />
+          <button type="button" title="Undo" onClick={undo} className="rounded p-1 text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink">
+            <Undo2 size={14} />
+          </button>
+          <button type="button" title="Redo" onClick={redo} className="rounded p-1 text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink">
+            <Redo2 size={14} />
+          </button>
+          <button
+            type="button"
+            title="Clear all drawings"
+            onClick={() => {
+              commit([]);
+              setSelectedId(null);
+            }}
+            className="rounded p-1 text-ink-3 transition-colors hover:bg-surface-2 hover:text-loss"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
         {legend && (
           <div className="pointer-events-none absolute left-2.5 top-2 z-10 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px]">
             <span className="text-ink-3">{legend.date}</span>
@@ -245,6 +379,21 @@ export function TradingChart({
           </div>
         )}
         <div ref={containerRef} className="w-full" style={{ height: isFs ? "100%" : height }} />
+        {hasData && (
+          <DrawingCanvas
+            chartRef={chartRef}
+            getMain={getMain}
+            tool={tool}
+            drawings={drawings}
+            selectedId={selectedId}
+            setSelectedId={setSelectedId}
+            onChange={handleDrawingChange}
+            onToolDone={() => setTool(null)}
+            bars={bars}
+            showVolumeProfile={showVP}
+            levels={levels}
+          />
+        )}
         {!hasData && (
           <div className="absolute inset-0 flex items-center justify-center text-sm text-ink-3">
             No price history yet.

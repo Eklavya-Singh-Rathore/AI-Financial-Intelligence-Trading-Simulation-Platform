@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class OrderCreate(BaseModel):
     symbol: str = Field(min_length=1, max_length=32)
     side: Literal["buy", "sell"]
-    order_type: Literal["market", "limit", "stop"] = "market"
+    order_type: Literal["market", "limit", "stop", "stop_limit"] = "market"
     qty: int = Field(ge=1, le=1_000_000)
     limit_price: float | None = Field(default=None, gt=0)
     stop_price: float | None = Field(default=None, gt=0)

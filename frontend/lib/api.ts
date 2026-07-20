@@ -106,7 +106,7 @@ export type SimPortfolio = {
 
 export type SimOrder = {
   id: string; symbol: string; side: "buy" | "sell";
-  order_type: "market" | "limit" | "stop"; qty: number;
+  order_type: "market" | "limit" | "stop" | "stop_limit"; qty: number;
   limit_price: number | null; stop_price: number | null;
   status: string; source: "manual" | "ai"; agent_run_id: string | null;
   reason: string | null; created_at: string; filled_at: string | null;
@@ -136,7 +136,7 @@ export type SimIntelligence = {
 };
 
 export type OrderCreate = {
-  symbol: string; side: "buy" | "sell"; order_type: "market" | "limit" | "stop";
+  symbol: string; side: "buy" | "sell"; order_type: "market" | "limit" | "stop" | "stop_limit";
   qty: number; limit_price?: number; stop_price?: number;
 };
 

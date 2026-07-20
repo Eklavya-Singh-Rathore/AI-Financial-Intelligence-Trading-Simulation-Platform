@@ -92,6 +92,15 @@ def trigger_fill_price(
             return max(bar.open, stop_price)
         if side == "sell" and bar.low <= stop_price:
             return min(bar.open, stop_price)
+    elif order_type == "stop_limit":
+        # Rests until the stop triggers, then behaves as a limit order. On a
+        # single daily bar, fill only if the bar both triggers the stop and
+        # reaches the limit.
+        assert stop_price is not None and limit_price is not None
+        if side == "buy" and bar.high >= stop_price and bar.low <= limit_price:
+            return min(bar.open, limit_price)
+        if side == "sell" and bar.low <= stop_price and bar.high >= limit_price:
+            return max(bar.open, limit_price)
     return None
 
 
@@ -364,6 +373,10 @@ async def place_order(
         raise SimulationError("limit orders require a positive limit_price")
     if order_type == "stop" and (stop_price is None or stop_price <= 0):
         raise SimulationError("stop orders require a positive stop_price")
+    if order_type == "stop_limit" and (
+        limit_price is None or limit_price <= 0 or stop_price is None or stop_price <= 0
+    ):
+        raise SimulationError("stop-limit orders require positive limit_price and stop_price")
     if order_type == "market" and (limit_price is not None or stop_price is not None):
         raise SimulationError("market orders take no limit/stop price")
 

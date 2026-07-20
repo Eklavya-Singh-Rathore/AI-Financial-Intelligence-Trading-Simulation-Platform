@@ -403,5 +403,7 @@ export function useTradingChart({
     chart.timeScale().setVisibleRange({ from: toTime(range.from), to: toTime(range.to) });
   }, []);
 
-  return { containerRef, legend, setRange, chartRef };
+  const getMain = useCallback(() => series.current.get("main") ?? null, []);
+
+  return { containerRef, legend, setRange, chartRef, getMain };
 }
