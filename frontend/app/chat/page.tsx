@@ -56,8 +56,8 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-3rem)] gap-4">
-      <aside className="flex w-60 shrink-0 flex-col rounded-lg border border-line">
+    <div className="flex flex-col gap-4 md:h-[calc(100vh-6.5rem)] md:flex-row">
+      <aside className="flex max-h-56 w-full shrink-0 flex-col rounded-xl border border-line md:max-h-none md:w-64">
         <Button
           variant="outline"
           size="sm"
@@ -89,7 +89,7 @@ export default function ChatPage() {
         </div>
       </aside>
 
-      <section className="flex min-w-0 flex-1 flex-col rounded-lg border border-line">
+      <section className="flex min-h-[24rem] min-w-0 flex-1 flex-col rounded-xl border border-line md:min-h-0">
         {!active ? (
           <div className="flex flex-1 items-center justify-center">
             <EmptyState
@@ -105,7 +105,7 @@ export default function ChatPage() {
                 <div key={m.id} className={clsx("flex", m.role === "user" ? "justify-end" : "justify-start")}>
                   <div
                     className={clsx(
-                      "max-w-[80%] rounded-lg px-3.5 py-2.5 text-sm leading-relaxed",
+                      "max-w-[80%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed shadow-xs",
                       m.role === "user" ? "bg-accent text-on-accent" : "bg-surface-2",
                     )}
                   >

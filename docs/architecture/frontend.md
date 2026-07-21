@@ -8,6 +8,27 @@ Card, Stat, Table, Badge, Button, Input, Select, Tabs, Sheet, EmptyState,
 Skeleton, Spinner), a responsive **app shell** with a mobile drawer, a Cmd/Ctrl-K
 **command palette**, and a site-wide **floating AI assistant**.
 
+**Premium redesign (2026-07).** A *tasteful* gradient/glow/glass layer over the
+flat foundation, added **centrally** so pages re-skin via tokens/variants rather
+than rewrites. `app/globals.css` gained `accent-2` (purple gradient partner),
+`surface-3`, `on-accent`, `warn`, `shadow-lg` + accent `shadow-glow`, and
+`.bg-grad-primary` / `.bg-grad-buy` / `.glass` / `.hover-lift` helpers + a
+`scale-in` motion token (each with light + dark values — parity preserved).
+`lib/ui.ts` gained a `gradient` Button variant; `Card` gained
+`default|elevated|glass` variants (now `rounded-xl`); `Stat` gained an icon chip,
+top-right delta, and a chart slot. **New primitives:** `Sparkline` (extracted from
+the dashboard), `Avatar`, `Progress`, `Tooltip`, `DropdownMenu`. The **shell**
+moved global controls to a **desktop topbar** (centered command-palette search;
+live NSE market clock on the right), with the theme toggle + an avatar account
+menu (sign-out) in the **sticky** sidebar footer and the collapse toggle in the
+sidebar header. Applied per page: the gradient **Buy — Market Order** CTA + iconed
+KPI tiles (Simulation/Portfolio/Insights/Dashboard breadth), an elevated
+decision-card with a glowing shield + initials avatars (Agents), a glow/gradient
+**login hero**, and a **responsive Chat** (the previously fixed two-pane layout
+now stacks on mobile). Notifications/Alerts/Upgrade-to-Pro chrome is deliberately
+omitted (no backend for it). Remaining: instrument-page control normalization +
+Dialog/Toast/Pagination primitives.
+
 ## Pages (`app/`)
 
 | Route | Purpose |

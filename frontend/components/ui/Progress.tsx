@@ -1,6 +1,6 @@
 import { cn } from "@/lib/ui";
 
-type Tone = "accent" | "gain" | "loss" | "warn";
+type Tone = "accent" | "gain" | "loss" | "warn" | "neutral";
 
 type Props = {
   /** Current value; percentage is value / max. */
@@ -16,6 +16,7 @@ const TONE_BAR: Record<Tone, string> = {
   gain: "bg-gain",
   loss: "bg-loss",
   warn: "bg-warn",
+  neutral: "bg-ink-3",
 };
 
 /** Thin token-driven meter (allocations, exposure, scores). */

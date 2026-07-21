@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Plus, RefreshCw, Search, Trash2 } from "lucide-react";
+import { LayoutGrid, Minus, Plus, RefreshCw, Search, Trash2, TrendingDown, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
@@ -13,6 +13,7 @@ import {
   Input,
   SkeletonRows,
   Sparkline,
+  Stat,
   Tabs,
   Table,
   Tbody,
@@ -142,6 +143,15 @@ export default function Dashboard() {
           {ingest.isPending ? "Refreshing…" : ingest.isSuccess ? "Refresh queued" : "Refresh data"}
         </Button>
       </div>
+
+      {summary.data && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Stat label="Advancers" value={String(breadth.up)} icon={<TrendingUp size={14} />} tone="gain" sub="up on the day" />
+          <Stat label="Decliners" value={String(breadth.down)} icon={<TrendingDown size={14} />} tone="loss" sub="down on the day" />
+          <Stat label="Unchanged" value={String(breadth.flat)} icon={<Minus size={14} />} tone="accent" sub="flat" />
+          <Stat label="Universe" value={String(total)} icon={<LayoutGrid size={14} />} tone="accent" sub="tracked instruments" />
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
         <Tabs items={tabItems} value={tab} onValueChange={setTab} className="min-w-0 flex-1 border-b-0" />

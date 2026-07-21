@@ -1,7 +1,15 @@
 # project_handover.md
 
 > **Single source of truth for resuming development** — self-contained; no prior
-> conversations needed. Last updated: **2026-07-21, Phase 6.1 SHIPPED** — merged
+> conversations needed. Last updated: **2026-07-21**. **Frontend premium redesign
+> (in progress on `main`)** — a tasteful gradient/glow/glass layer over the flat
+> design system: new tokens + `gradient` Button + Card/Stat variants + 5 new
+> primitives (Sparkline/Avatar/Progress/Tooltip/DropdownMenu), a desktop topbar +
+> sticky sidebar w/ live market clock + avatar menu, and per-page premium passes
+> (Simulation/Portfolio/Insights/Dashboard/Agents/Chat/Login). Frontend-only, zero
+> backend change; gates green each ship; Vercel auto-deploys. Remaining:
+> instrument-page control normalization + Dialog/Toast/Pagination. See
+> `docs/architecture/frontend.md`. **Phase 6.1 SHIPPED** earlier — merged
 > to `main` (`e8f3fba`), Render + Vercel deployed, production-verified. Phase 6.1:
 > (1) rotated the Gemini key + moved `GEMINI_MODEL` to the stable
 > `gemini-flash-latest` alias (the pinned `gemini-2.5-flash` 404s for new keys);

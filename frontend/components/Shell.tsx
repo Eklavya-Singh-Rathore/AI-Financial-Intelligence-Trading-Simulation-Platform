@@ -226,7 +226,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   };
 
   if (pathname.startsWith("/login")) {
-    return <main className="min-h-screen p-6">{children}</main>;
+    return <main className="min-h-screen">{children}</main>;
   }
 
   return (

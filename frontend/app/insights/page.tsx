@@ -2,13 +2,14 @@
 
 // AI Insights (Phase 5): evaluation metrics + portfolio-intelligence digest.
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, BarChart3, Brain, Target, Trophy } from "lucide-react";
 import Link from "next/link";
 import {
   Card,
   CardBody,
   CardHeader,
   CardTitle,
+  Progress,
   Skeleton,
   Stat,
   Table,
@@ -71,16 +72,22 @@ export default function InsightsPage() {
             <Stat
               label="Agent runs (window)"
               value={`${completed} ok`}
+              icon={<BarChart3 size={14} />}
+              tone="accent"
               sub={failed ? `${failed} failed` : "no failures"}
             />
             <Stat
               label="Avg decision confidence"
               value={ev.agents.avg_confidence !== null ? `${(ev.agents.avg_confidence * 100).toFixed(0)}%` : "–"}
+              icon={<Target size={14} />}
+              tone="accent"
               sub={Object.entries(ev.agents.action_mix).map(([a, n]) => `${a} ${n}`).join(" · ") || undefined}
             />
             <Stat
               label="Analyst agreement"
               value={ev.agents.stance_agreement_pct !== null ? `${ev.agents.stance_agreement_pct}%` : "–"}
+              icon={<Brain size={14} />}
+              tone="accent"
               sub={`technical vs news · ${ev.agents.stance_pairs_evaluated} runs`}
             />
             <Stat
@@ -90,6 +97,8 @@ export default function InsightsPage() {
                   ? `${(ev.recommendation_success.success_rate * 100).toFixed(0)}%`
                   : "–"
               }
+              icon={<Trophy size={14} />}
+              tone="gain"
               sub={
                 ev.recommendation_success.evaluated
                   ? `${ev.recommendation_success.evaluated} BUY/SELL evaluated · avg ${fmtPct(ev.recommendation_success.avg_return_pct)}`
@@ -202,6 +211,13 @@ export default function InsightsPage() {
                   <span className="tabular">{iq.diversification.effective_positions}</span>
                 </span>
               </div>
+              <Progress
+                value={iq.risk_score}
+                max={100}
+                tone={iq.risk_score >= 66 ? "loss" : iq.risk_score >= 33 ? "warn" : "gain"}
+                aria-label="Portfolio risk score"
+                className="max-w-sm"
+              />
               {iq.suggestions.length > 0 && (
                 <ul className="list-disc space-y-0.5 pl-4 text-ink-2">
                   {iq.suggestions.map((s, i) => (

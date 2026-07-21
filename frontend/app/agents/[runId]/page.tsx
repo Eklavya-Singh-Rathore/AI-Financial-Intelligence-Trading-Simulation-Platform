@@ -1,13 +1,13 @@
 "use client";
 
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowRight, Send } from "lucide-react";
+import { ArrowRight, Send, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import clsx from "clsx";
 import { StatusChip } from "@/components/RunBits";
-import { Badge, Button, Card, CardBody, CardHeader, CardTitle, Skeleton } from "@/components/ui";
+import { Avatar, Badge, Button, Card, CardBody, CardHeader, CardTitle, Skeleton } from "@/components/ui";
 import { api, fmtNum, type SimOrder } from "@/lib/api";
 import { type Tone } from "@/lib/ui";
 
@@ -204,38 +204,51 @@ export default function RunPage() {
       )}
 
       {fd?.action && (
-        <Card>
+        <Card variant="elevated">
           <CardHeader>
             <CardTitle>Final decision</CardTitle>
           </CardHeader>
           <CardBody>
-            <div className="flex flex-wrap items-center gap-3">
-              <span
-                className={clsx(
-                  "text-2xl font-bold",
-                  fd.action === "BUY" ? "text-gain" : fd.action === "SELL" ? "text-loss" : "",
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span
+                    className={clsx(
+                      "text-3xl font-bold tracking-tight",
+                      fd.action === "BUY" ? "text-gain" : fd.action === "SELL" ? "text-loss" : "text-ink",
+                    )}
+                  >
+                    {fd.action}
+                  </span>
+                  {fd.action !== "HOLD" && <span className="tabular text-lg">{fd.size_pct}% of capital</span>}
+                  <span className="tabular text-sm text-ink-2">
+                    confidence {fmtNum((fd.confidence ?? 0) * 100, 0)}%
+                  </span>
+                  {fd.risk_verdict && (
+                    <Badge tone={(fd.risk_verdict === "veto" ? "loss" : fd.risk_verdict === "approve" ? "gain" : "neutral") as Tone}>
+                      risk: {fd.risk_verdict}
+                    </Badge>
+                  )}
+                  {(fd.limited_by ?? []).map((l) => (
+                    <Badge key={l} tone="loss">{l}</Badge>
+                  ))}
+                </div>
+                {fd.summary && <p className="mt-2 text-sm leading-relaxed text-ink-2">{fd.summary}</p>}
+                {proposable && (
+                  <div className="mt-3">
+                    <SendToSimulation runId={runId} />
+                  </div>
                 )}
-              >
-                {fd.action}
-              </span>
-              {fd.action !== "HOLD" && <span className="tabular text-lg">{fd.size_pct}% of capital</span>}
-              <span className="tabular text-sm text-ink-2">confidence {fmtNum((fd.confidence ?? 0) * 100, 0)}%</span>
-              {fd.risk_verdict && <Badge tone="neutral">risk: {fd.risk_verdict}</Badge>}
-              {(fd.limited_by ?? []).map((l) => (
-                <Badge key={l} tone="loss">{l}</Badge>
-              ))}
-            </div>
-            {fd.summary && <p className="mt-2 text-sm leading-relaxed text-ink-2">{fd.summary}</p>}
-            {proposable && (
-              <div className="mt-3">
-                <SendToSimulation runId={runId} />
+                {run.data?.token_usage && (
+                  <p className="tabular mt-2 text-xs text-ink-3">
+                    {run.data.token_usage.calls} LLM calls · {run.data.token_usage.input_tokens} in / {run.data.token_usage.output_tokens} out · {run.data.llm_provider}
+                  </p>
+                )}
               </div>
-            )}
-            {run.data?.token_usage && (
-              <p className="tabular mt-2 text-xs text-ink-3">
-                {run.data.token_usage.calls} LLM calls · {run.data.token_usage.input_tokens} in / {run.data.token_usage.output_tokens} out · {run.data.llm_provider}
-              </p>
-            )}
+              <span className="hidden size-16 shrink-0 place-items-center rounded-2xl bg-accent/10 text-accent shadow-glow sm:grid">
+                <ShieldCheck size={30} />
+              </span>
+            </div>
           </CardBody>
         </Card>
       )}
@@ -246,7 +259,10 @@ export default function RunPage() {
         {messages.data?.map((m) => (
           <Card key={m.seq}>
             <CardHeader>
-              <CardTitle>{AGENT_LABELS[m.agent_name] ?? m.agent_name}</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Avatar name={AGENT_LABELS[m.agent_name] ?? m.agent_name} size="sm" />
+                {AGENT_LABELS[m.agent_name] ?? m.agent_name}
+              </CardTitle>
               <span className="tabular text-xs text-ink-3">
                 #{m.seq}{m.latency_ms ? ` · ${(m.latency_ms / 1000).toFixed(1)}s` : ""}
               </span>
