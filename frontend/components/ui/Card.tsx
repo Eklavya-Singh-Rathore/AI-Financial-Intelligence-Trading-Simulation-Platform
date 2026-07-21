@@ -1,14 +1,21 @@
 import { type HTMLAttributes } from "react";
 import { cn } from "@/lib/ui";
 
-/** Bordered surface panel with subtle elevation. */
-export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return (
-    <div
-      className={cn("rounded-lg border border-line bg-surface shadow-xs", className)}
-      {...props}
-    />
-  );
+export type CardVariant = "default" | "elevated" | "glass";
+
+const CARD_VARIANTS: Record<CardVariant, string> = {
+  default: "border border-line bg-surface shadow-xs",
+  elevated: "border border-line bg-surface shadow-md",
+  glass: "glass shadow-md",
+};
+
+/** Bordered surface panel. `elevated` lifts it; `glass` is a translucent blur. */
+export function Card({
+  className,
+  variant = "default",
+  ...props
+}: HTMLAttributes<HTMLDivElement> & { variant?: CardVariant }) {
+  return <div className={cn("rounded-xl", CARD_VARIANTS[variant], className)} {...props} />;
 }
 
 export function CardHeader({ className, ...props }: HTMLAttributes<HTMLDivElement>) {

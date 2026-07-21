@@ -1,6 +1,7 @@
-// Design-system primitives (Phase 6). Import from "@/components/ui".
+// Design-system primitives (Phase 6; premium layer in the redesign).
+// Import from "@/components/ui".
 export { Button } from "./Button";
-export { Card, CardHeader, CardTitle, CardBody } from "./Card";
+export { Card, CardHeader, CardTitle, CardBody, type CardVariant } from "./Card";
 export { Badge } from "./Badge";
 export { Stat } from "./Stat";
 export { Table, Thead, Tbody, Tr, Th, Td } from "./Table";
@@ -11,3 +12,8 @@ export { Skeleton, SkeletonRows } from "./Skeleton";
 export { EmptyState } from "./EmptyState";
 export { Spinner } from "./Spinner";
 export { Sheet } from "./Sheet";
+export { Sparkline } from "./Sparkline";
+export { Avatar } from "./Avatar";
+export { Progress } from "./Progress";
+export { Tooltip } from "./Tooltip";
+export { DropdownMenu, DropdownItem } from "./DropdownMenu";

@@ -12,6 +12,7 @@ import {
   EmptyState,
   Input,
   SkeletonRows,
+  Sparkline,
   Tabs,
   Table,
   Tbody,
@@ -25,23 +26,6 @@ import { nextSort, sortRows } from "@/lib/tableSort.mjs";
 
 const PAGE_SIZE = 100;
 const TYPE_CHIPS = ["equity", "index", "etf"] as const;
-
-function Sparkline({ points }: { points: number[] }) {
-  if (points.length < 2) return <span className="text-ink-3">–</span>;
-  const w = 96, h = 28, pad = 2;
-  const min = Math.min(...points), max = Math.max(...points);
-  const span = max - min || 1;
-  const step = (w - pad * 2) / (points.length - 1);
-  const d = points
-    .map((v, i) => `${i === 0 ? "M" : "L"}${(pad + i * step).toFixed(1)},${(h - pad - ((v - min) / span) * (h - pad * 2)).toFixed(1)}`)
-    .join(" ");
-  const up = points[points.length - 1] >= points[0];
-  return (
-    <svg width={w} height={h} aria-hidden className="block">
-      <path d={d} fill="none" strokeWidth={2} className={up ? "stroke-gain" : "stroke-loss"} />
-    </svg>
-  );
-}
 
 type SortState = { key: string; dir: "asc" | "desc" } | null;
 

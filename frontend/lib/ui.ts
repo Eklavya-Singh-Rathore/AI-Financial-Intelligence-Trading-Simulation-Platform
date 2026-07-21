@@ -11,21 +11,24 @@ export const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 " +
   "focus-visible:ring-offset-1 focus-visible:ring-offset-surface";
 
-export type ButtonVariant = "primary" | "outline" | "ghost" | "subtle" | "danger";
+export type ButtonVariant = "primary" | "gradient" | "outline" | "ghost" | "subtle" | "danger";
 export type ButtonSize = "sm" | "md" | "icon" | "icon-sm";
 
 const BUTTON_BASE =
   "inline-flex items-center justify-center gap-1.5 rounded-md font-medium whitespace-nowrap " +
-  "transition-colors duration-150 motion-reduce:transition-none " +
-  "disabled:pointer-events-none disabled:opacity-50 " +
+  "transition-[color,background-color,border-color,box-shadow,filter,transform] duration-150 " +
+  "motion-reduce:transition-none disabled:pointer-events-none disabled:opacity-50 " +
   focusRing;
 
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
-  primary: "bg-accent text-white hover:brightness-110 active:brightness-95",
+  primary: "bg-accent text-on-accent hover:brightness-110 active:brightness-95",
+  // Hero CTA: token-driven gradient + accent glow on hover (used sparingly).
+  gradient:
+    "bg-grad-primary text-on-accent shadow-sm hover:shadow-glow hover:brightness-105 active:brightness-95",
   outline: "border border-line bg-surface text-ink hover:bg-surface-2 active:bg-line/40",
   ghost: "text-ink-2 hover:bg-surface-2 hover:text-ink active:bg-line/40",
   subtle: "bg-surface-2 text-ink hover:bg-line/50 active:bg-line/70",
-  danger: "bg-loss text-white hover:brightness-110 active:brightness-95",
+  danger: "bg-loss text-on-accent hover:brightness-110 active:brightness-95",
 };
 
 const BUTTON_SIZES: Record<ButtonSize, string> = {
