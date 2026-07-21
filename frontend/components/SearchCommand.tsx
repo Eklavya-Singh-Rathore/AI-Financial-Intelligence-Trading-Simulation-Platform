@@ -45,7 +45,7 @@ function TrackRow({ r, onDone }: { r: MarketSearchResult; onDone: (symbol: strin
           type="button"
           onClick={() => track.mutate()}
           disabled={track.isPending}
-          className="inline-flex shrink-0 items-center gap-1 rounded-md bg-accent px-2 py-1 text-xs font-medium text-white hover:brightness-110 disabled:opacity-50"
+          className="inline-flex shrink-0 items-center gap-1 rounded-md bg-accent px-2 py-1 text-xs font-medium text-on-accent hover:brightness-110 disabled:opacity-50"
         >
           <Download size={12} /> Track
         </button>

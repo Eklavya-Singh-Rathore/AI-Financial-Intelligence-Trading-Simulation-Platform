@@ -39,7 +39,7 @@ export function OrderRow({ o, onAccept, onReject, onCancel }: {
           <span className="inline-flex gap-1">
             <button
               onClick={() => onAccept(o.id)}
-              className="rounded bg-gain px-1.5 py-0.5 text-[11px] font-medium text-white"
+              className="rounded bg-gain px-1.5 py-0.5 text-[11px] font-medium text-on-accent"
               title="Accept and execute as market order"
             >
               <Check size={11} className="inline" /> accept

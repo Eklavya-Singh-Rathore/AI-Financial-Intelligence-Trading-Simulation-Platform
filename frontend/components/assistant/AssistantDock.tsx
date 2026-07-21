@@ -94,7 +94,7 @@ export function AssistantDock() {
           type="button"
           aria-label="Open AI assistant"
           onClick={openDock}
-          className="fixed bottom-5 right-5 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-accent text-white shadow-lg transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+          className="fixed bottom-5 right-5 z-40 flex size-12 items-center justify-center rounded-full bg-grad-primary text-on-accent shadow-glow transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
         >
           <Bot size={20} />
         </button>
@@ -148,7 +148,7 @@ export function AssistantDock() {
                     <div
                       className={clsx(
                         "max-w-[85%] rounded-lg px-3 py-2 text-sm leading-relaxed",
-                        m.role === "user" ? "bg-accent text-white" : "bg-surface-2",
+                        m.role === "user" ? "bg-accent text-on-accent" : "bg-surface-2",
                       )}
                     >
                       {m.role === "assistant" ? (
@@ -189,7 +189,7 @@ export function AssistantDock() {
               onClick={() => submit()}
               disabled={!sessionId || send.isPending || !draft.trim()}
               aria-label="Send"
-              className="rounded-md bg-accent px-3 py-2 text-white transition hover:opacity-90 disabled:opacity-50"
+              className="rounded-md bg-accent px-3 py-2 text-on-accent transition hover:opacity-90 disabled:opacity-50"
             >
               <Send size={15} />
             </button>
