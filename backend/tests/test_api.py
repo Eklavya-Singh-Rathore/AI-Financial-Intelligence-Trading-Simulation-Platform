@@ -45,7 +45,9 @@ def test_health_without_database(client, monkeypatch):
         assert body["status"] == "ok"
         assert body["database"] == "not_configured"
         # Phase 6 Kronos audit: /health surfaces the configured checkpoint ids.
-        assert body["kronos_model_id"] == "NeoQuasar/Kronos-small"
+        # Phase 6.1: the test env is "development", so the variant registry
+        # resolves the local default (base); tokenizer + context are unchanged.
+        assert body["kronos_model_id"] == "NeoQuasar/Kronos-base"
         assert body["kronos_tokenizer_id"] == "NeoQuasar/Kronos-Tokenizer-base"
         assert body["default_forecaster"] == "kronos"
         assert body["kronos_max_context"] == 512

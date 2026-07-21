@@ -116,7 +116,7 @@ def test_kronos_source_is_vendored():
 
 @pytest.mark.slow
 def test_kronos_forecast_end_to_end(price_df):
-    """Real Kronos forecast (downloads NeoQuasar/Kronos-small weights, CPU).
+    """Real Kronos forecast (downloads the dev-default NeoQuasar/Kronos-base weights, CPU).
 
     Skips only if the model genuinely cannot be loaded (e.g. no network in the
     environment); a load failure surfaces as ForecasterError, not a crash.
@@ -131,5 +131,7 @@ def test_kronos_forecast_end_to_end(price_df):
     assert result.model_name == "kronos"
     assert len(result.predictions) == 5
     assert all(isinstance(p, float) and p == p for p in result.predictions)  # finite
-    assert result.meta["model_id"] == "NeoQuasar/Kronos-small"
+    # Phase 6.1: the test env is "development", so the variant registry resolves
+    # the local default (base).
+    assert result.meta["model_id"] == "NeoQuasar/Kronos-base"
     assert result.meta["context_len"] == len(price_df)

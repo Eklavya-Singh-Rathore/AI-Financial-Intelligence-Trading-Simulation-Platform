@@ -18,7 +18,15 @@ class BaselineForecaster(Forecaster):
     def __init__(self, lookback: int = 30) -> None:
         self.lookback = lookback
 
-    def forecast(self, df: pd.DataFrame, horizon: int) -> ForecastResult:
+    def forecast(
+        self,
+        df: pd.DataFrame,
+        horizon: int,
+        *,
+        target_timestamps: pd.Series | None = None,
+    ) -> ForecastResult:
+        # target_timestamps is unused: drift predictions don't depend on the
+        # future timestamps; the service owns target labelling/persistence.
         self._validate(df, horizon)
         close = df["close"].astype(float)
         last_close = float(close.iloc[-1])

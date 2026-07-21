@@ -79,15 +79,28 @@ yfinance → `price_bars` (idempotent upserts), daily scheduler refresh, and a
 pandas indicator engine (`sma`, `ema`, `rsi`, `macd`, `bollinger`) computed
 on demand.
 
-### 3.2 Forecasting (Phases 1–4.5)
+### 3.2 Forecasting (Phases 1–4.5, intraday in 6.1)
 
-`GET /instruments/{s}/forecast?model=kronos|baseline&horizon=1..60`. The
-registry maps `kronos` to in-process torch (`KRONOS_MODE=local`, dev) or the
+`GET /instruments/{s}/forecast?model=kronos|baseline&horizon=1..60&interval=1D`.
+The registry maps `kronos` to in-process torch (`KRONOS_MODE=local`, dev) or the
 HF Space (`remote`, production) — same public name, same persisted
 `model_name`. Failures normalize to `ForecasterError` → HTTP 503; agent runs
 fall back to `baseline`. Forecasts persist per point (`forecasts` table) with
 owner stamping. Kronos is the default forecaster (`DEFAULT_FORECASTER=kronos`)
 and, as of Phase 6, is shown by default on the instrument chart.
+
+**Intraday forecasting (Phase 6.1).** The service is interval-aware: it sources
+bars through the `ohlcv` resolver (daily `price_bars`; 1m–1H on-demand yfinance)
+and generates interval-correct future timestamps — business days for daily,
+session-aware NSE steps (09:15–15:30 IST, weekends skipped) for intraday, the
+resample anchor for weekly/monthly. Those timestamps are passed into the
+forecaster (`resolve_target_timestamps`) so Kronos sees the right temporal
+context — Kronos is a candlestick model and forecasts any grain. Persistence
+gained `interval` + `target_ts` columns (migration `0017`); intraday/weekly/
+monthly rows are excluded from the daily accuracy metric (`interval='1D'`
+filter in evaluation). The instrument-page overlay now renders on every interval
+(the chart maps `target_time` for intraday, `target_date` otherwise); the UI
+requests `persist=false` for display, the same as daily.
 
 #### Kronos model audit (Phase 6)
 
@@ -103,15 +116,21 @@ code.
 | Variant | Params | Context | Deployed? |
 |---|---|---|---|
 | Kronos-mini | ~4.1M | 2048 | no |
-| **Kronos-small** | **~24.7M** | **512** | **yes (local + remote)** |
-| Kronos-base | ~102.3M | 512 | no |
+| **Kronos-small** | **~24.7M** | **512** | **yes — production (remote Space)** |
+| **Kronos-base** | **~102.3M** | **512** | **yes — local dev (in-process, Phase 6.1)** |
 
-Configured ids (identical in both modes): forecaster
-`KRONOS_MODEL_ID=NeoQuasar/Kronos-small`, tokenizer
-`KRONOS_TOKENIZER_ID=NeoQuasar/Kronos-Tokenizer-base`, `KRONOS_MAX_CONTEXT=512`,
-`KRONOS_DEVICE=cpu`. Set in `backend/app/core/config.py` (local defaults) and as
-Space env vars in `infrastructure/hf-space/app.py`; production runs
-`KRONOS_MODE=remote` (Render slim image ships without torch).
+**Variant selection (Phase 6.1).** Model choice is a data lookup in
+`app/ml/kronos_variants.py` (`KRONOS_VARIANTS`: mini/small/base — the only
+published NeoQuasar checkpoints; "tiny"/"large" belong to a different model
+family and are intentionally absent). `KRONOS_VARIANT` picks one; empty =
+**automatic by `ENV`** — `base` for local development (a dev box has the RAM),
+`small` in production (the free-tier inference budget). `resolve_kronos_config`
+lets the low-level `KRONOS_MODEL_ID`/`KRONOS_TOKENIZER_ID`/`KRONOS_MAX_CONTEXT`
+still override per-field for back-compat. `/health` echoes the resolved ids +
+`kronos_variant`. `KRONOS_DEVICE=cpu`; production runs `KRONOS_MODE=remote`
+(Render slim image ships without torch), so the HF Space (still Kronos-small,
+its own `app.py` config) serves inference — local dev on base and prod on small
+need no Space change.
 
 **Live verification.** Backend `GET /health` reports the configured ids
 (`kronos_model_id`, `kronos_tokenizer_id`, `kronos_max_context`,
@@ -261,21 +280,22 @@ the existing chat RAG grounds the answer — no backend change. A Cmd/Ctrl-K
 ## 4. Database
 
 Supabase Postgres 17 + pgvector; async SQLAlchemy 2 + asyncpg. Alembic head:
-**`0016_stop_limit`**. RLS is enabled deny-by-default on every public table
+**`0017_intraday_forecasts`**. RLS is enabled deny-by-default on every public table
 (locks the auto-generated REST API); the backend connects as `postgres` and
 enforces ownership in application code.
 
 | Group | Tables |
 |---|---|
 | Market data (adopted) | `instruments` (curated Nifty-100 + on-demand, + `sector_id`/`industry_id`), `price_bars`, `data_providers`, `instrument_provider_mappings`, `exchanges`, warehouse tables |
-| AI core (owned) | `forecasts`, `backtests`, `agent_runs` (+`context_snapshot`), `agent_messages`, `chat_sessions`, `chat_messages`, `agent_embeddings` (vector 384) |
+| AI core (owned) | `forecasts` (+`interval`/`target_ts`, Phase 6.1), `backtests`, `agent_runs` (+`context_snapshot`), `agent_messages`, `chat_sessions`, `chat_messages`, `agent_embeddings` (vector 384) |
 | Paper trading (owned, Phase 5) | `sim_portfolios`, `sim_orders`, `sim_trades`, `sim_positions` |
 | Research (owned, Phase 5) | `instrument_fundamentals` (JSONB cache), `research_documents` (news corpus, vector 384) |
 | Market expansion (owned, Phase 6) | `watchlists`, `watchlist_items` (`0014`), `ingest_jobs` durable queue (`0015`) |
 
 Migration chain: `0004_warehouse` → … → **`0011_simulation`** →
 **`0012_research`** → **`0013_run_context`** → **`0014_watchlists`** →
-**`0016_stop_limit`**. Applied manually (`alembic upgrade head`); CI proves
+**`0016_stop_limit`** → **`0017_intraday_forecasts`** (adds `forecasts.interval`
++ `forecasts.target_ts`). Applied manually (`alembic upgrade head`); CI proves
 the full chain on vanilla Postgres (`pgvector/pgvector:pg17`).
 
 ## 5. Auth & multi-user isolation
@@ -336,6 +356,9 @@ Phase 6 additions: `FINNHUB_API_KEY`, `ALPHA_VANTAGE_API_KEY` (secrets),
 `NEWS_INGEST_DAILY_CAP`, `INGEST_PAUSE_SECONDS`. All have safe defaults (the
 providers degrade to keyless yfinance), so no deploy-time action is required
 beyond setting the two provider secrets if those integrations are wanted.
+Phase 6.1: `KRONOS_VARIANT` (empty = auto: base for dev, small for prod) and
+`GEMINI_MODEL` now defaults to the stable `gemini-flash-latest` alias (pinned
+Gemini versions get retired for new API keys and then 404).
 
 ## 9. Testing & CI
 

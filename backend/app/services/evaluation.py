@@ -180,6 +180,9 @@ async def _matured_forecast_rows(
             (PriceBar.instrument_id == Forecast.instrument_id)
             & (PriceBar.date == Forecast.target_date),
         )
+        # Daily accuracy only: intraday/weekly/monthly forecasts (Phase 6.1) don't
+        # mature against stored daily closes, so exclude them from this metric.
+        .where(Forecast.interval == "1D")
     )
     if not privileged:
         stmt = stmt.where(Forecast.user_id == owner_id)

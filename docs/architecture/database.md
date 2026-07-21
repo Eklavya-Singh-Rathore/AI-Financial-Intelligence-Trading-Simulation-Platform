@@ -10,8 +10,10 @@ and direct hosts are IPv6-only.
 
 The project **adopts** a pre-existing market-data warehouse and adds its own
 owned tables. Migrations are Alembic, applied to Supabase with
-`alembic_version` stamped in lockstep. **Head: `0016_stop_limit`** (Phase 6.5
-widened `sim_orders.order_type` to `VARCHAR(16)` for the `stop_limit` type).
+`alembic_version` stamped in lockstep. **Head: `0017_intraday_forecasts`**
+(Phase 6.1 added `forecasts.interval` + `forecasts.target_ts` for intraday
+forecasting; Phase 6.5's `0016_stop_limit` widened `sim_orders.order_type` to
+`VARCHAR(16)` for the `stop_limit` type).
 
 | Group | Tables |
 |---|---|
@@ -32,7 +34,9 @@ tables) → `0012_research` (fundamentals cache + news-RAG corpus) →
 `0013_run_context` (`agent_runs.context_snapshot` for explainability) →
 `0014_watchlists` (per-user watchlists) → `0015_ingest_jobs` (durable
 whole-market track/backfill queue) → **`0016_stop_limit`** (Phase 6.5: widen
-`sim_orders.order_type` to `VARCHAR(16)` for the stop-limit order type).
+`sim_orders.order_type` to `VARCHAR(16)` for the stop-limit order type) →
+**`0017_intraday_forecasts`** (Phase 6.1: add `forecasts.interval` +
+`forecasts.target_ts` for intraday forecasting; idempotent + guarded).
 
 Migrations run manually (`cd backend && alembic upgrade head`) from a dev
 machine or CI; never at app boot. CI's integration job applies the full chain

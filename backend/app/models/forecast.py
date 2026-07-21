@@ -33,6 +33,15 @@ class Forecast(Base):
     horizon: Mapped[int] = mapped_column(Integer, nullable=False)
     step: Mapped[int] = mapped_column(Integer, nullable=False)
     target_date: Mapped[date_type] = mapped_column(Date, nullable=False)
+    # Phase 6.1 intraday forecasting: ``interval`` is the bar grain ('1D' for
+    # daily/weekly/monthly, '1m'..'1H' for intraday); ``target_ts`` carries the
+    # full intraday timestamp (naive exchange-local) that ``target_date`` can't.
+    interval: Mapped[str] = mapped_column(
+        String(8), nullable=False, server_default=text("'1D'")
+    )
+    target_ts: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=False), nullable=True
+    )
     predicted_close: Mapped[Decimal] = mapped_column(Numeric, nullable=False)
     generated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

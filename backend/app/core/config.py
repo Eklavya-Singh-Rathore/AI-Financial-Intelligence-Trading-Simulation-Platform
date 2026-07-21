@@ -55,9 +55,15 @@ class Settings(BaseSettings):
 
     # --- Hugging Face / Kronos ---
     hf_token: str | None = None
-    kronos_model_id: str = "NeoQuasar/Kronos-small"
-    kronos_tokenizer_id: str = "NeoQuasar/Kronos-Tokenizer-base"
-    kronos_max_context: int = 512
+    # Model selection is variant-driven (see app/ml/kronos_variants.py).
+    # KRONOS_VARIANT picks mini|small|base; empty = automatic by ENV (base for
+    # local dev, small in production - the free-tier inference budget). The three
+    # fields below are optional low-level overrides (empty/0 = derive from the
+    # variant) kept for back-compat with deployments that pin Hub ids directly.
+    kronos_variant: str = ""
+    kronos_model_id: str = ""
+    kronos_tokenizer_id: str = ""
+    kronos_max_context: int = 0
     kronos_device: str = "cpu"
 
     # --- Remote inference (Phase 4.5: Hugging Face Space) ---
@@ -89,7 +95,11 @@ class Settings(BaseSettings):
     llm_provider: str = "gemini"  # gemini | openai | fake
     llm_fallback_provider: str | None = "openai"
     google_ai_studio_api_key: str | None = None
-    gemini_model: str = "gemini-2.5-flash"
+    # gemini-flash-latest is Google's stable alias that always tracks the current
+    # Flash tier; pinned versions (e.g. gemini-2.5-flash) get retired for new API
+    # keys and then 404. Using the alias keeps the flash price tier and avoids
+    # that recurring breakage. Override with GEMINI_MODEL if a pin is required.
+    gemini_model: str = "gemini-flash-latest"
     openai_api_key: str | None = None
     openai_model: str = "gpt-4o-mini"
     anthropic_api_key: str | None = None

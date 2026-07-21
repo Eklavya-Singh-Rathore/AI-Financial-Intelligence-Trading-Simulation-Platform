@@ -168,6 +168,7 @@ async def get_forecast(
     symbol: str,
     auth: Annotated[AuthContext, Depends(get_auth)],
     horizon: int = Query(default=5, ge=1, le=60),
+    interval: str = Query(default="1D", description="bar grain: 1m..1H, 1D, 1W, 1M"),
     model: str | None = Query(default=None, description="'kronos' or 'baseline'"),
     persist: bool = Query(default=True),
     session: AsyncSession = Depends(get_session),
@@ -177,6 +178,7 @@ async def get_forecast(
             session,
             symbol.upper(),
             horizon,
+            interval=interval,
             model_name=model,
             persist=persist,
             user_id=auth.user_id,
@@ -192,6 +194,11 @@ async def get_forecast(
         ForecastPoint(
             step=i + 1,
             target_date=run.target_dates[i],
+            target_time=(
+                run.target_ts[i].strftime("%Y-%m-%dT%H:%M:%S")
+                if run.intraday and i < len(run.target_ts)
+                else None
+            ),
             predicted_close=run.result.predictions[i],
         )
         for i in range(len(run.result.predictions))
@@ -200,6 +207,7 @@ async def get_forecast(
         symbol=run.instrument.symbol,
         model_name=run.result.model_name,
         horizon=run.result.horizon,
+        interval=run.interval,
         points=points,
         meta=run.result.meta,
     )

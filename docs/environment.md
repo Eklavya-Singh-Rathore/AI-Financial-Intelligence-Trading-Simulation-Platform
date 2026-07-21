@@ -52,9 +52,10 @@ app boots with partial config and degrades explicitly).
 | `INFERENCE_MAX_RETRIES` | `2` | no | rarely | extra attempts for transient failures |
 | `INFERENCE_RETRY_BACKOFF_SECONDS` | `1.5` | no | rarely | backoff base (jittered) |
 | `INFERENCE_WAKE_MAX_WAIT_SECONDS` | `180` | no | rarely | total budget while a slept Space returns 503 |
-| `KRONOS_MODEL_ID` | `NeoQuasar/Kronos-small` | no | local/Render + Space | checkpoint id (keep backend & Space aligned) |
-| `KRONOS_TOKENIZER_ID` | `NeoQuasar/Kronos-Tokenizer-base` | no | 〃 | tokenizer id |
-| `KRONOS_MAX_CONTEXT` | `512` | no | 〃 | context window cap |
+| `KRONOS_VARIANT` | `` (auto) | no | local (`base`) | `mini`\|`small`\|`base`; empty = auto by `ENV` (base for dev, small for prod). Phase 6.1 |
+| `KRONOS_MODEL_ID` | `` (from variant) | no | override only | pin a checkpoint id; overrides the variant (back-compat) |
+| `KRONOS_TOKENIZER_ID` | `` (from variant) | no | override only | pin a tokenizer id; overrides the variant |
+| `KRONOS_MAX_CONTEXT` | `0` (from variant) | no | override only | pin the context window; overrides the variant |
 | `KRONOS_DEVICE` | `cpu` | no | local only | local-mode torch device |
 | `EMBEDDING_MODEL_ID` | `sentence-transformers/all-MiniLM-L6-v2` | no | local/Render + Space | embedding model (must stay 384-d — DB column `vector(384)`) |
 
@@ -70,7 +71,7 @@ option only).
 | `LLM_PROVIDER` | `gemini` | no | local, Render | primary provider (`gemini` \| `openai` \| `fake`) |
 | `LLM_FALLBACK_PROVIDER` | `openai` | no | local, Render | automatic failover target (empty = none) |
 | `GOOGLE_AI_STUDIO_API_KEY` | — | **yes** | local, Render | Gemini key |
-| `GEMINI_MODEL` | `gemini-2.5-flash` | no | local, Render | Gemini model id |
+| `GEMINI_MODEL` | `gemini-flash-latest` | no | local, Render | Gemini model id. Phase 6.1 default is the stable `-latest` alias: pinned versions (e.g. `gemini-2.5-flash`) get retired for new API keys and then 404 |
 | `OPENAI_API_KEY` | — | **yes** | local, Render | OpenAI key (fallback; currently unfunded — see handover) |
 | `OPENAI_MODEL` | `gpt-4o-mini` | no | local, Render | OpenAI model id |
 | `LLM_TIMEOUT_SECONDS` | `90` | no | rarely | per-call timeout |

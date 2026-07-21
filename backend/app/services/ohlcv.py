@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from datetime import time as _time_of_day
 from typing import Literal, TypedDict
 
 import pandas as pd
@@ -63,6 +64,59 @@ def time_str(idx: pd.Timestamp, intraday: bool) -> str:
         ts = idx.tz_localize(None) if idx.tzinfo is not None else idx
         return ts.strftime("%Y-%m-%dT%H:%M:%S")
     return idx.strftime("%Y-%m-%d")
+
+
+# NSE regular session (IST). Exchange holidays are not modelled - matching the
+# daily business-day path, which also only skips weekends.
+_SESSION_OPEN = _time_of_day(9, 15)
+_SESSION_CLOSE = _time_of_day(15, 30)
+_OPEN_OFFSET = pd.Timedelta(hours=9, minutes=15)
+_INTRADAY_STEP_MINUTES = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "1H": 60}
+
+
+def _next_session_open(ts: pd.Timestamp) -> pd.Timestamp:
+    """The 09:15 open of the next weekday session after ``ts``."""
+    nxt = (ts + pd.Timedelta(days=1)).normalize() + _OPEN_OFFSET
+    while nxt.weekday() >= 5:
+        nxt = (nxt + pd.Timedelta(days=1)).normalize() + _OPEN_OFFSET
+    return nxt
+
+
+def future_timestamps(last_ts: pd.Timestamp, interval: str, periods: int) -> pd.DatetimeIndex:
+    """Future bar timestamps at the interval's cadence, starting after ``last_ts``.
+
+    Daily -> business days; weekly/monthly -> the resample offset; intraday ->
+    session-aware steps within NSE hours (09:15-15:30 IST, weekends skipped).
+    Returned naive (tz-dropped) so intraday labels match the wire wall-clock.
+    """
+    if periods < 1:
+        return pd.DatetimeIndex([])
+    cfg = INTERVALS.get(interval, {"kind": "daily"})
+    kind = cfg.get("kind", "daily")
+    last = pd.Timestamp(last_ts)
+    if last.tzinfo is not None:
+        last = last.tz_localize(None)
+
+    if kind == "daily":
+        return pd.bdate_range(start=last + pd.offsets.BDay(1), periods=periods)
+    if kind == "resample":
+        # Anchored freq (W-FRI / ME) from `last`; drop the anchor if `last` is on
+        # it, then take the next `periods`. +2 buffers the possible dropped anchor.
+        idx = pd.date_range(start=last, periods=periods + 2, freq=cfg["rule"])
+        return pd.DatetimeIndex(idx[idx > last][:periods])
+
+    # intraday
+    step = pd.Timedelta(minutes=_INTRADAY_STEP_MINUTES.get(interval, 5))
+    bars: list[pd.Timestamp] = []
+    cur = last
+    while len(bars) < periods:
+        cur = cur + step
+        if cur.weekday() >= 5 or cur.time() >= _SESSION_CLOSE:
+            cur = _next_session_open(cur)
+        elif cur.time() < _SESSION_OPEN:
+            cur = cur.normalize() + _OPEN_OFFSET
+        bars.append(cur)
+    return pd.DatetimeIndex(bars)
 
 
 _RESAMPLE_AGG = {

@@ -37,7 +37,20 @@ class Forecaster(ABC):
     name: str = "base"
 
     @abstractmethod
-    def forecast(self, df: pd.DataFrame, horizon: int) -> ForecastResult:
+    def forecast(
+        self,
+        df: pd.DataFrame,
+        horizon: int,
+        *,
+        target_timestamps: pd.Series | None = None,
+    ) -> ForecastResult:
+        """Forecast ``horizon`` future closes.
+
+        ``target_timestamps`` (optional) are the future bar timestamps the caller
+        wants predicted - supplied for non-daily intervals so the model sees the
+        right temporal context. When omitted, implementations default to the next
+        business days (daily behaviour), preserving existing callers.
+        """
         raise NotImplementedError
 
     @staticmethod
@@ -48,3 +61,17 @@ class Forecaster(ABC):
             raise ValueError("price frame must contain a 'close' column")
         if df.empty:
             raise ForecasterError("no price history available to forecast from")
+
+
+def resolve_target_timestamps(
+    target_timestamps: pd.Series | None, index: pd.Index, horizon: int
+) -> pd.Series:
+    """The future timestamps to predict: the caller's if given, else business days.
+
+    Shared by the Kronos forecasters so local and remote build identical model
+    inputs. Business-day default keeps daily forecasting unchanged.
+    """
+    if target_timestamps is not None:
+        return pd.Series(pd.to_datetime(list(target_timestamps))).reset_index(drop=True)
+    last = pd.to_datetime(index[-1])
+    return pd.Series(pd.bdate_range(start=last + pd.offsets.BDay(1), periods=horizon))

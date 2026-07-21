@@ -83,9 +83,9 @@ export default function InstrumentPage() {
     [trades.data, symbol],
   );
   const forecast = useQuery({
-    queryKey: ["forecast", symbol, model],
-    queryFn: () => api.forecast(symbol, model),
-    enabled: showForecast && !intraday, // Kronos forecasts daily horizons
+    queryKey: ["forecast", symbol, model, interval],
+    queryFn: () => api.forecast(symbol, model, 5, interval),
+    enabled: showForecast, // Phase 6.1: Kronos forecasts every interval, incl. intraday
     staleTime: Infinity,
   });
   const backtest = useMutation({
@@ -138,39 +138,37 @@ export default function InstrumentPage() {
       )}
 
       <div className="space-y-2">
-        {intraday ? (
-          <p className="text-xs text-ink-3">
-            Intraday ({interval}) from yfinance — delayed, recent window only. The Kronos
-            forecast overlays on the daily/weekly/monthly intervals.
-          </p>
-        ) : (
-          <div className="flex flex-wrap items-center gap-3 text-sm">
-            <label className="flex items-center gap-1.5 text-ink-2">
-              <input
-                type="checkbox"
-                checked={showForecast}
-                onChange={(e) => setShowForecast(e.target.checked)}
-              />
-              Forecast
-            </label>
-            {showForecast && (
-              <select
-                value={model}
-                onChange={(e) => setModel(e.target.value as "kronos" | "baseline")}
-                className="rounded border border-line bg-surface px-2 py-1 text-xs"
-              >
-                <option value="kronos">kronos</option>
-                <option value="baseline">baseline</option>
-              </select>
-            )}
-            {showForecast && forecast.isLoading && (
-              <span className="text-xs text-ink-3">running {model}…</span>
-            )}
-            {showForecast && forecast.error && (
-              <span className="text-xs text-loss">forecast unavailable</span>
-            )}
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <label className="flex items-center gap-1.5 text-ink-2">
+            <input
+              type="checkbox"
+              checked={showForecast}
+              onChange={(e) => setShowForecast(e.target.checked)}
+            />
+            Forecast
+          </label>
+          {showForecast && (
+            <select
+              value={model}
+              onChange={(e) => setModel(e.target.value as "kronos" | "baseline")}
+              className="rounded border border-line bg-surface px-2 py-1 text-xs"
+            >
+              <option value="kronos">kronos</option>
+              <option value="baseline">baseline</option>
+            </select>
+          )}
+          {showForecast && forecast.isLoading && (
+            <span className="text-xs text-ink-3">running {model}…</span>
+          )}
+          {showForecast && forecast.error && (
+            <span className="text-xs text-loss">forecast unavailable</span>
+          )}
+          {intraday && (
+            <span className="text-xs text-ink-3">
+              intraday ({interval}) from yfinance — delayed, recent window
+            </span>
+          )}
+        </div>
         <label className="flex w-fit items-center gap-1.5 text-sm text-ink-2">
           <input type="checkbox" checked={showSR} onChange={(e) => setShowSR(e.target.checked)} />
           Support / resistance overlay
@@ -178,7 +176,7 @@ export default function InstrumentPage() {
         <TradingChart
           bars={prices.data?.bars ?? []}
           indicators={indicators.data?.points ?? []}
-          forecast={showForecast && !intraday ? (forecast.data ?? null) : null}
+          forecast={showForecast ? (forecast.data ?? null) : null}
           trades={symbolTrades}
           interval={interval}
           onIntervalChange={setChartInterval}

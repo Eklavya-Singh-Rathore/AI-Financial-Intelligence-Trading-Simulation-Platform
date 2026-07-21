@@ -126,5 +126,6 @@ def test_missing_elapsed_ms_is_filled_locally(price_df, stub):
     stub.response = {"predictions": [1.0, 2.0, 3.0, 4.0, 5.0]}
     result = RemoteKronosForecaster().forecast(price_df, horizon=5)
     assert isinstance(result.meta["space_latency_ms"], int)
-    # falls back to settings when the Space omits ids
-    assert result.meta["model_id"] == "NeoQuasar/Kronos-small"
+    # falls back to the resolved local config when the Space omits ids; the test
+    # env is "development" so the variant registry resolves base (Phase 6.1).
+    assert result.meta["model_id"] == "NeoQuasar/Kronos-base"

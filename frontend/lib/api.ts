@@ -44,8 +44,10 @@ export type PriceBar = {
 export type IndicatorPoint = { date: string; values: Record<string, number | null> };
 
 export type ForecastOut = {
-  symbol: string; model_name: string; horizon: number;
-  points: { step: number; target_date: string; predicted_close: number }[];
+  symbol: string; model_name: string; horizon: number; interval?: string;
+  points: {
+    step: number; target_date: string; target_time?: string | null; predicted_close: number;
+  }[];
   meta: Record<string, unknown>;
 };
 
@@ -282,9 +284,10 @@ export const api = {
     request<{ points: IndicatorPoint[] }>(
       `instruments/${encodeURIComponent(symbol)}/indicators?names=${names}${interval ? `&interval=${interval}` : ""}`,
     ),
-  forecast: (symbol: string, model: string, horizon = 5) =>
+  forecast: (symbol: string, model: string, horizon = 5, interval?: string) =>
     request<ForecastOut>(
-      `instruments/${encodeURIComponent(symbol)}/forecast?horizon=${horizon}&model=${model}&persist=false`,
+      `instruments/${encodeURIComponent(symbol)}/forecast?horizon=${horizon}&model=${model}` +
+        `&persist=false${interval ? `&interval=${interval}` : ""}`,
     ),
   backtest: (body: {
     symbol: string; engine: string; params: { fast: number; slow: number };

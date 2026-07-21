@@ -7,6 +7,7 @@ from sqlalchemy import text
 
 from app.core.config import get_settings
 from app.db.base import get_engine
+from app.ml.kronos_variants import resolve_kronos_config
 
 router = APIRouter(tags=["health"])
 
@@ -15,6 +16,7 @@ router = APIRouter(tags=["health"])
 async def health() -> dict:
     """Liveness + database connectivity check."""
     settings = get_settings()
+    _kronos_cfg = resolve_kronos_config(settings)
     db_status = "not_configured"
     if settings.database_configured:
         try:
@@ -32,10 +34,12 @@ async def health() -> dict:
         "embeddings_mode": settings.embeddings_mode,
         "default_forecaster": settings.default_forecaster,
         # Configured Kronos checkpoint (Phase 6 audit): local mode loads these
-        # directly; remote mode passes them to the Space as defaults.
-        "kronos_model_id": settings.kronos_model_id,
-        "kronos_tokenizer_id": settings.kronos_tokenizer_id,
-        "kronos_max_context": settings.kronos_max_context,
+        # directly; remote mode passes them to the Space as defaults. Resolved
+        # via the variant registry (Phase 6.1) so ENV-based selection is echoed.
+        "kronos_variant": settings.kronos_variant or None,
+        "kronos_model_id": _kronos_cfg.model_id,
+        "kronos_tokenizer_id": _kronos_cfg.tokenizer_id,
+        "kronos_max_context": _kronos_cfg.max_context,
         "embedding_model_id": settings.embedding_model_id,
     }
     # In remote mode, report what the Space last said it had loaded (from the

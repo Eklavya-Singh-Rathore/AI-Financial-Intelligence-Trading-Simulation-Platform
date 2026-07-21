@@ -277,7 +277,10 @@ export function useTradingChart({
       S.get("forecast")!.applyOptions({ color: c.accent, title: `${forecast.model_name}` });
       S.get("forecast")!.setData([
         { time: toTime(last.date), value: last.close },
-        ...forecast.points.map((p) => ({ time: toTime(p.target_date), value: p.predicted_close })),
+        ...forecast.points.map((p) => ({
+          time: toTime(p.target_time ?? p.target_date),
+          value: p.predicted_close,
+        })),
       ]);
     } else {
       drop("forecast");
