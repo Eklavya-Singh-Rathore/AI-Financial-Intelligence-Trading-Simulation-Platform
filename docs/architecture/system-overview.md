@@ -1,6 +1,6 @@
 # System Overview
 
-**AI Financial Intelligence Trading Simulation Platform** — a multi-user
+**FinIntel — AI Financial Intelligence** — a multi-user
 decision-support system (NO real trading) for the Indian market: a **curated
 Nifty-100 universe** (~100 instruments) that **lazy-loads the rest of NSE/BSE on
 demand** (India-only, ~300-instrument cap). It ingests daily OHLCV, computes

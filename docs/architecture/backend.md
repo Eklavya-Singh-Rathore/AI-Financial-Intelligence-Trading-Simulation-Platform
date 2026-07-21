@@ -17,10 +17,10 @@ is a config change.
 |---|---|
 | `app/main.py` | App factory, lifespan (logging, orphan-run sweep, scheduler), CORS, router mounting at `/` and `/api/v1`, `/metrics` |
 | `app/core/` | `config.py` (pydantic-settings), `auth.py` (JWT/API-key → `AuthContext`), logging, domain constants |
-| `app/api/routers/` | `health`, `instruments` (prices/indicators/forecast/profile/financials/earnings/summary), `ingest`, `backtest`, `agents` (+explanation), `chat`, `simulation` (+analytics), `evaluation`, `watchlists`, `market`, `admin` (Phase 6) |
+| `app/api/routers/` | `health`, `instruments` (prices/indicators/forecast/profile/financials/earnings/summary), `ingest`, `backtest`, `agents` (+explanation), `chat`, `simulation` (+analytics), `evaluation`, `watchlists`, `market`, `admin` |
 | `app/services/` | `market_data`, `data_ingest`, `indicators`, `forecast_service`, `backtest_service`, `news`, `embeddings`, `space_client`, `chat_service`, `simulation` (paper-trading engine), `research` (fundamentals), `news_rag` (news corpus + retrieval), `evaluation` (AI quality/cost), `watchlists`, `instrument_admin` (catalog sync), `market_expansion` (lazy-load + queue drain), `portfolio_analytics` (numpy-only VaR/Monte-Carlo/optimization) |
-| `app/catalog/` | curated Nifty-100 universe — `CatalogEntry` frozen dataclass + `CURATED_UNIVERSE` tuple (Phase 6) |
-| `app/providers/` | external-data abstraction: `BaseProvider` (capability set, never-raise methods) + `registry` (ordered by `PROVIDER_PRIORITY`) + `yfinance`, `finnhub`, `alpha_vantage`, `newsapi` (Phase 6) |
+| `app/catalog/` | curated Nifty-100 universe — `CatalogEntry` frozen dataclass + `CURATED_UNIVERSE` tuple |
+| `app/providers/` | external-data abstraction: `BaseProvider` (capability set, never-raise methods) + `registry` (ordered by `PROVIDER_PRIORITY`) + `yfinance`, `finnhub`, `alpha_vantage`, `newsapi` |
 | `app/ml/` | `Forecaster` interface + `registry`; `baseline`, `kronos` (local), `remote_kronos` (Space); vendored `kronos_src/` (MIT) |
 | `app/backtesting/` | `Backtester` interface + registry; NautilusTrader + a simple vectorized engine; SMA-crossover strategy |
 | `app/llm/` | `LLMClient` + failover registry; Gemini / OpenAI / fake clients |
@@ -85,9 +85,9 @@ inference client (`app/services/space_client.py`) follows the same pattern.
 | `POST /chat/sessions`, `POST /chat/sessions/{id}/messages` | RAG-grounded chat with news citations |
 | `GET /instruments/{s}/profile` `/financials` `/earnings` | yfinance/Alpha Vantage fundamentals, TTL-cached, degrade-to-DB |
 | `GET/POST /simulation/*` | portfolio, orders (market/limit/stop), trades, performance, intelligence, AI proposals |
-| `GET /simulation/analytics/{risk,montecarlo,optimization}` | portfolio analytics — VaR, Monte-Carlo GBM, mean-variance frontier (Phase 6) |
-| `GET/POST/PATCH/DELETE /watchlists/*` | per-user watchlists CRUD (Phase 6) |
-| `GET /market/search` · `POST /market/track` · `GET /market/track/{s}/status` | whole-market lazy load: search → track → durable queue (Phase 6) |
+| `GET /simulation/analytics/{risk,montecarlo,optimization}` | portfolio analytics — VaR, Monte-Carlo GBM, mean-variance frontier |
+| `GET/POST/PATCH/DELETE /watchlists/*` | per-user watchlists CRUD |
+| `GET /market/search` · `POST /market/track` · `GET /market/track/{s}/status` | whole-market lazy load: search → track → durable queue |
 | `GET /admin/catalog` · `POST /admin/catalog/sync` | curated-catalog plan + idempotent sync (privileged; Phase 6) |
 | `GET /evaluation/summary` | forecast accuracy, agent stats, recommendation success, usage & cost |
 

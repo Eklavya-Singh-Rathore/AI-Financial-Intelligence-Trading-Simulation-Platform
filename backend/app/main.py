@@ -63,13 +63,13 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="AI Financial Intelligence Platform",
+    title="FinIntel — AI Financial Intelligence",
     description=(
         "Market data ingestion, technical indicators, forecasting, NautilusTrader "
-        "backtesting, and a multi-agent analysis pipeline for a fixed 16-asset "
-        "Indian-market universe. Decision-support only - no real trading."
+        "backtesting, and a multi-agent analysis pipeline over an Indian-market "
+        "universe. Decision-support only - no real trading."
     ),
-    version="0.2.5",
+    version="1.0.0",
     lifespan=lifespan,
 )
 

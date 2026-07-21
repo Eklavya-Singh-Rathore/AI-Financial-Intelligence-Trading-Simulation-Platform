@@ -246,7 +246,7 @@ with gr.Blocks(title="ai-inference-service") as demo:
     gr.Markdown(
         "## ai-inference-service\n"
         "API-only Space serving the official **Kronos** K-line model and "
-        "**MiniLM** embeddings for the AI Financial Intelligence Platform.\n\n"
+        "**MiniLM** embeddings for FinIntel — AI Financial Intelligence.\n\n"
         "Endpoints: `GET /health` · `POST /forecast` · `POST /embed` "
         "(see the repo's README for contracts). Inference runs on **CPU** and "
         "consumes no GPU quota; the button below only verifies the ZeroGPU "

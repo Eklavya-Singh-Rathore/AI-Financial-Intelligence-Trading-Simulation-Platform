@@ -36,7 +36,7 @@ Dialog/Toast/Pagination primitives.
 | `/login` | Sign in / sign up (Supabase browser client) + **Continue as Guest** |
 | `/` | Dashboard — **watchlist-aware** universe table (search/filter/sort, watchlist tabs, star toggles, 30-day trend) |
 | `/instruments/[symbol]` | Professional **`TradingChart`** (candles/volume + MA overlays + forecast band + trade markers); SMA-crossover backtest with metric tiles; "Analyze with agents"; **Research** (profile, earnings trend, statement tables); watchlist star |
-| `/portfolio` | **Portfolio analytics** — holdings, allocation, Value-at-Risk, Monte-Carlo simulation, mean-variance optimization (Phase 6) |
+| `/portfolio` | **Portfolio analytics** — holdings, allocation, Value-at-Risk, Monte-Carlo simulation, mean-variance optimization |
 | `/simulation` | Paper trading (redesigned focused workspace) — portfolio tiles + positions, order ticket (market/limit/stop), open orders + AI proposals (accept/reject), trade history |
 | `/agents`, `/agents/[runId]` | Agent-run list + live-polling transcript & decision card; **explanation panel** (why/stances/indicators/forecast/backtest/risk at decision time) + **Send to Simulation** |
 | `/insights` | AI evaluation — forecast accuracy, agent stats, recommendation success, usage & cost + portfolio-intelligence digest |

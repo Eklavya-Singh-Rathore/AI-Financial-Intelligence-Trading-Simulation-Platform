@@ -12,9 +12,9 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AI Financial Intelligence",
+  title: "FinIntel — AI Financial Intelligence",
   description:
-    "Decision-support dashboard: Indian-market data, forecasts, backtests, and multi-agent analysis.",
+    "AI-powered financial intelligence: Indian-market data, deep-learning forecasts, backtests, and multi-agent analysis.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

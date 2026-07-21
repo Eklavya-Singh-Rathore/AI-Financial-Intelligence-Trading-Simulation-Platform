@@ -1,7 +1,7 @@
 # ADR-0006: Paper-trading engine semantics & human-in-the-loop AI
 
 - **Status:** Accepted
-- **Date:** 2026 (Phase 5)
+- **Date:** 2026
 
 ## Context
 

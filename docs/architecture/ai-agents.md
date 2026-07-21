@@ -70,7 +70,7 @@ order (human accept/reject — never auto-executed, see
 ## Chat / RAG
 
 `chat_service` grounds each answer in live universe stats + the user's recent
-agent decisions + semantic memory + (Phase 5) **retrieved news headlines with
+agent decisions + semantic memory + **retrieved news headlines with
 numbered citations**, all inside `<untrusted-data>` boundaries, then calls the
 LLM (instructed to cite `[n]`). Headlines land in the `research_documents`
 corpus two ways: opportunistically on every agent run, and via the daily

@@ -13,8 +13,8 @@ short_description: Kronos K-line forecasts + MiniLM embeddings API
 
 # ai-inference-service
 
-Private inference API for the AI Financial Intelligence Trading Simulation
-Platform (Phase 4.5). Serves the **official Kronos** checkpoints
+Private inference API for FinIntel — AI Financial Intelligence. Serves the
+**official Kronos** checkpoints
 ([NeoQuasar/Kronos-small](https://huggingface.co/NeoQuasar/Kronos-small) +
 [NeoQuasar/Kronos-Tokenizer-base](https://huggingface.co/NeoQuasar/Kronos-Tokenizer-base),
 MIT) and **MiniLM** embeddings

@@ -1,27 +1,26 @@
 # Master Architecture
 
-**AI Financial Intelligence Trading Simulation Platform** — the complete
-system reference as of Phase 6.5. One document, top to bottom; per-area deep
-dives live in [`docs/architecture/`](architecture/) and decisions in
-[`docs/adr/`](adr/).
+**FinIntel — AI Financial Intelligence** — the complete
+system reference. One document, top to bottom; per-area deep dives live in
+[`docs/architecture/`](architecture/) and decisions in [`docs/adr/`](adr/).
 
 A multi-user **decision-support** system (NO real trading) for the Indian
 market: a **curated Nifty-100 universe** (~100 instruments) that **lazy-loads
 the rest of the NSE/BSE market on demand** (India-only, ~300-instrument cap).
-It ingests daily OHLCV, computes indicators, forecasts prices with the vendored
-**Kronos** foundation model, backtests on **NautilusTrader**, runs a **7-agent
-LLM pipeline** producing risk-limited recommendations, explains those
-recommendations, lets users **paper-trade** them (human-in-the-loop, never
-auto-executed), computes **portfolio analytics** (VaR / Monte-Carlo /
-optimization), grounds a chat assistant (full page + a site-wide floating dock)
-in market data + persisted news with citations, and measures its own AI
-quality. Phase 6 brings a **professional UI redesign** (design tokens +
-component library, TradingView-grade charting) and **external data providers**
-(Finnhub + Alpha Vantage behind a capability abstraction). **Phase 6.5** turns
-the chart into a trading workstation: intraday intervals (yfinance, on-demand),
-7 chart types, 15 indicators + Volume Profile, a canvas drawing-tools engine
-(trend/ray/rectangle/fib/measure/text + persistence), a chart-docked order
-ticket (incl. stop-limit), and support/resistance + AI-recommendation overlays.
+It ingests daily and intraday OHLCV, computes indicators, forecasts prices with
+the vendored **Kronos** foundation model, backtests on **NautilusTrader**, runs
+a **7-agent LLM pipeline** producing risk-limited recommendations, explains
+those recommendations, lets users **paper-trade** them (human-in-the-loop,
+never auto-executed), and computes **portfolio analytics** (VaR / Monte-Carlo /
+optimization). News is **aggregated across NewsAPI, Finnhub, Yahoo Finance, and
+Alpha Vantage** — normalized, de-duplicated, merged, and ranked by relevance and
+recency — and grounds both the agents and a cited chat assistant (full page + a
+site-wide floating dock). The frontend is a professional design-token UI with a
+**TradingView-grade charting workstation**: intraday → monthly intervals, 7
+chart types, 15 indicators + Volume Profile, a canvas drawing-tools engine
+(trend/ray/rectangle/fib/measure/text with select/move/delete + persistence), a
+chart-docked order ticket (incl. stop-limit), and support/resistance + forecast
+overlays. The platform also measures its own AI quality.
 
 ## 1. Production topology
 
@@ -73,7 +72,7 @@ backtester, LLM) come from **registries** so switching is a config change.
 
 ## 3. Feature architecture
 
-### 3.1 Market data & indicators (Phase 1)
+### 3.1 Market data & indicators
 
 yfinance → `price_bars` (idempotent upserts), daily scheduler refresh, and a
 pandas indicator engine (`sma`, `ema`, `rsi`, `macd`, `bollinger`) computed
@@ -89,7 +88,7 @@ fall back to `baseline`. Forecasts persist per point (`forecasts` table) with
 owner stamping. Kronos is the default forecaster (`DEFAULT_FORECASTER=kronos`)
 and, as of Phase 6, is shown by default on the instrument chart.
 
-**Intraday forecasting (Phase 6.1).** The service is interval-aware: it sources
+**Intraday forecasting.** The service is interval-aware: it sources
 bars through the `ohlcv` resolver (daily `price_bars`; 1m–1H on-demand yfinance)
 and generates interval-correct future timestamps — business days for daily,
 session-aware NSE steps (09:15–15:30 IST, weekends skipped) for intraday, the
@@ -102,7 +101,7 @@ filter in evaluation). The instrument-page overlay now renders on every interval
 (the chart maps `target_time` for intraday, `target_date` otherwise); the UI
 requests `persist=false` for display, the same as daily.
 
-#### Kronos model audit (Phase 6)
+#### Kronos model audit
 
 The platform uses the **official Kronos** foundation model (github.com/shiyu-coder/Kronos,
 MIT), vendored at `backend/app/ml/kronos_src/` for local inference and mirrored
@@ -119,7 +118,7 @@ code.
 | **Kronos-small** | **~24.7M** | **512** | **yes — production (remote Space)** |
 | **Kronos-base** | **~102.3M** | **512** | **yes — local dev (in-process, Phase 6.1)** |
 
-**Variant selection (Phase 6.1).** Model choice is a data lookup in
+**Variant selection.** Model choice is a data lookup in
 `app/ml/kronos_variants.py` (`KRONOS_VARIANTS`: mini/small/base — the only
 published NeoQuasar checkpoints; "tiny"/"large" belong to a different model
 family and are intentionally absent). `KRONOS_VARIANT` picks one; empty =
@@ -141,13 +140,13 @@ against the Space's own `GET /health` (`kronos_model_id`, `embedding_model_id`,
 `device`, `app_version`). A forecast response's `meta.model_id` is a third
 confirmation. Embeddings use `all-MiniLM-L6-v2` (384-d), same local/remote split.
 
-### 3.3 Backtesting (Phase 1)
+### 3.3 Backtesting
 
 `POST /backtest` — SMA-crossover on NautilusTrader (or the `simple` vectorized
 engine), returning total return, Sharpe, max drawdown, win rate, volatility,
 fills; persisted with the caller's `user_id`.
 
-### 3.4 Multi-agent pipeline (Phase 2) + Explainability (Phase 5)
+### 3.4 Multi-agent pipeline + Explainability
 
 `POST /agents/run` (202, fire-and-poll): gather (prices, indicators, forecast,
 backtest, news, memory) → technical analyst → news analyst → bull/bear debate
@@ -162,7 +161,7 @@ rationale, risk rationale), stances, sentiment, debate points, risk concerns,
 and the indicators/forecast/backtest **as the agents saw them** — with zero
 LLM calls. Pre-snapshot runs degrade to message-derived sections.
 
-### 3.5 Paper trading simulation (Phase 5)
+### 3.5 Paper trading simulation
 
 Engine: `app/services/simulation.py`; API: `/simulation/*`; UI: `/simulation`.
 
@@ -190,7 +189,7 @@ Engine: `app/services/simulation.py`; API: `/simulation/*`; UI: `/simulation`.
 
 See [ADR-0006](adr/ADR-0006-paper-trading.md).
 
-### 3.6 Financial research (Phase 5)
+### 3.6 Financial research
 
 `app/services/research.py` fetches yfinance fundamentals (`Ticker.info`,
 income/balance/cashflow statements) in a worker thread, serializes them to
@@ -206,8 +205,7 @@ section on the instrument page.
 
 Chat (`/chat/*`) grounds each answer deterministically: detected symbols →
 live market stats; recent agent decisions; semantic memory
-(`agent_embeddings`, MiniLM 384-d, cosine KNN); conversation history; and
-(Phase 5) **retrieved news with numbered citations**. Headlines are persisted
+(`agent_embeddings`, MiniLM 384-d, cosine KNN); conversation history; and **retrieved news with numbered citations**. Headlines are persisted
 into `research_documents` (content-hash dedupe, embedded, `doc_type='news'`)
 two ways: opportunistically on every agent run, and by a daily
 `news_ingest` scheduler job (gated by `ENABLE_NEWS_INGEST`, retention
@@ -216,7 +214,7 @@ two ways: opportunistically on every agent run, and by a daily
 chat UI. All retrieved content renders inside the `<untrusted-data>` prompt
 boundary.
 
-### 3.8 AI evaluation (Phase 5)
+### 3.8 AI evaluation
 
 `GET /evaluation/summary` — deterministic quality/cost metrics over persisted
 data: **forecast accuracy** (MAPE + signed bias per model over matured
@@ -227,7 +225,7 @@ from snapshot entry price vs latest close), and **usage & cost** (token
 totals, estimated USD via `LLM_COST_INPUT_PER_1M`/`LLM_COST_OUTPUT_PER_1M`,
 run wall time, per-step latency). UI: `/insights`.
 
-### 3.9 Market expansion & catalog (Phase 6)
+### 3.9 Market expansion & catalog
 
 The universe grows in three tiers. **Curated catalog** — `app/catalog/curated.py`
 holds a `CatalogEntry` tuple (~100 Nifty-100 names); `POST /admin/catalog/sync`
@@ -243,7 +241,7 @@ restarts and is drained both opportunistically (BackgroundTasks) and by a
 caps total instruments. `GET /instruments/summary` is paginated/searchable
 (`q`, `types`, `watchlist_id`, `limit`, `offset`) returning `{items, total}`.
 
-### 3.10 External data providers (Phase 6)
+### 3.10 External data providers
 
 `app/providers/` — a capability-based abstraction. `BaseProvider` declares a
 `frozenset[Capability]` and never-raising methods (`search_symbols`,
@@ -255,7 +253,7 @@ the platform runs fully keyless. News ingest is quota-guarded
 (`NEWS_INGEST_DAILY_CAP`): held/watched symbols first, then the rest rotated by
 day index.
 
-### 3.11 Portfolio analytics (Phase 6)
+### 3.11 Portfolio analytics
 
 `app/services/portfolio_analytics.py` — **numpy-only** (no scipy) quantitative
 finance over the paper portfolio's holdings and stored daily bars:
@@ -265,7 +263,7 @@ approximation), **Monte-Carlo GBM** simulation (`np.random.default_rng`), and
 avoiding a QP-solver dependency). Exposed at
 `GET /simulation/analytics/{risk,montecarlo,optimization}`; UI: `/portfolio`.
 
-### 3.12 UI system & floating assistant (Phase 6)
+### 3.12 UI system & floating assistant
 
 A design-token system (Tailwind v4 CSS vars, the 9 original brand colors
 preserved) + a hand-built primitive library (`components/ui/*`). A professional
@@ -321,7 +319,7 @@ APScheduler in-process (single-flight via Postgres advisory locks):
 | `daily_ingest` | `DAILY_INGEST_HOUR:MINUTE` UTC | 815001 |
 | `sim_order_sweep` | ingest + 15 min | 815002 |
 | `news_ingest` | ingest + 30 min (if `ENABLE_NEWS_INGEST`; quota-guarded by `NEWS_INGEST_DAILY_CAP`) | 815003 |
-| `ingest_job_drain` (Phase 6) | every 5 min | 815004 |
+| `ingest_job_drain` | every 5 min | 815004 |
 | `space_keepalive` | every 6 h (remote inference only) | — |
 
 Advisory-lock `815005` guards `POST /admin/catalog/sync` (held across per-entry

@@ -19,15 +19,14 @@ context — loudly warned at startup.
 
 ## Per-user isolation
 
-`user_id` on `chat_sessions`, `agent_runs`, `backtests`, `forecasts`,
-(Phase 5) `sim_portfolios`/`sim_orders`/`sim_trades`, and (Phase 6)
+`user_id` on `chat_sessions`, `agent_runs`, `backtests`, `forecasts`, `sim_portfolios`/`sim_orders`/`sim_trades`, and
 `watchlists`. The backend stamps the caller's id on write and filters by owner
 on read; cross-user access returns `404`. Verified live with distinct users
 (and with the guest account, which is an ordinary `user`). The Phase 6 admin
 catalog-sync route (`POST /admin/catalog/sync`) is gated on `auth.privileged`
 (`service`/`admin`) — it returns `403` for ordinary users.
 
-## Guest access (Phase 4.6)
+## Guest access
 
 "Continue as Guest" authenticates a **dedicated, pre-provisioned guest Supabase
 account** — no bypass:

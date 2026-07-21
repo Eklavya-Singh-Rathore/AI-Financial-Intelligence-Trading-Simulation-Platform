@@ -1,4 +1,4 @@
-# Inference Space deployment — Hugging Face (Phase 4.5)
+# Inference Space deployment — Hugging Face
 
 `ai-inference-service` is a **private Gradio-SDK Space on ZeroGPU hardware**
 that serves the ML models the Render backend no longer runs in-process:

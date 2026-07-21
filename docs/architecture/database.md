@@ -19,9 +19,9 @@ forecasting; Phase 6.5's `0016_stop_limit` widened `sim_orders.order_type` to
 |---|---|
 | Market data (adopted, read) | `instruments` (curated Nifty-100 + on-demand, incl. `sector_id`/`industry_id` classification FKs), `price_bars`, `data_providers`, `instrument_provider_mappings`, `exchanges`, and the warehouse tables |
 | Project-owned | `forecasts`, `backtests`, `agent_runs` (+`idempotency_key`, +`context_snapshot`), `agent_messages`, `chat_sessions`, `chat_messages` |
-| Paper trading (Phase 5) | `sim_portfolios` (one per owner, unique over `COALESCE(user_id, zero-uuid)`), `sim_orders`, `sim_trades`, `sim_positions` |
-| Research (Phase 5) | `instrument_fundamentals` (yfinance JSONB cache, TTL), `research_documents` (news corpus, `content_hash` dedupe, `vector(384)`) |
-| Market expansion (Phase 6) | `watchlists`, `watchlist_items` (per-user, `0014`); `ingest_jobs` (durable track/backfill queue: status queued/running/done/error, `0015`) |
+| Paper trading | `sim_portfolios` (one per owner, unique over `COALESCE(user_id, zero-uuid)`), `sim_orders`, `sim_trades`, `sim_positions` |
+| Research | `instrument_fundamentals` (yfinance JSONB cache, TTL), `research_documents` (news corpus, `content_hash` dedupe, `vector(384)`) |
+| Market expansion | `watchlists`, `watchlist_items` (per-user, `0014`); `ingest_jobs` (durable track/backfill queue: status queued/running/done/error, `0015`) |
 | Semantic memory | `agent_embeddings` (`vector(384)`, pgvector) |
 
 ## Migration history (Alembic)
@@ -48,8 +48,8 @@ roles).
 ## Per-user ownership (migration 0009)
 
 `user_id UUID` (nullable, indexed) on `chat_sessions`, `agent_runs`,
-`backtests`, `forecasts`, (Phase 5) `sim_portfolios`/`sim_orders`/`sim_trades`,
-and (Phase 6) `watchlists`. On write the backend stamps the caller's `user_id`;
+`backtests`, `forecasts`, `sim_portfolios`/`sim_orders`/`sim_trades`,
+and `watchlists`. On write the backend stamps the caller's `user_id`;
 on read, non-privileged callers are filtered to their own rows
 (`AuthContext.owner_filter_id()`), cross-user access returns `404`, and legacy
 `NULL` rows are visible only to `admin`/`service`. Guest accounts are ordinary
@@ -74,7 +74,7 @@ locally (dev) or on the HF Space (`EMBEDDINGS_MODE=remote`, production) — same
 model, identical 384-d vectors. A TTL sweep purges embeddings older than
 `MEMORY_TTL_DAYS`.
 
-`research_documents` (Phase 5) uses the same 384-d vectors for the news
+`research_documents` uses the same 384-d vectors for the news
 corpus: headlines dedupe on `content_hash` (sha256 of title|url), embed in
 batch (rows keep `embedding=NULL` when embeddings are unavailable and are
 excluded from KNN), and are purged past `NEWS_RETENTION_DAYS`. News is a

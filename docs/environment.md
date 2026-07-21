@@ -1,4 +1,4 @@
-# Environment variables — complete reference (Phase 6)
+# Environment variables — complete reference
 
 Every variable the platform reads, grouped by concern. **Where set** uses:
 `local` = repo-root `.env` (git-ignored, from `.env.example`) ·
@@ -38,7 +38,7 @@ app boots with partial config and degrades explicitly).
 | `NEXT_PUBLIC_SUPABASE_URL` | — | no | Vercel, `frontend/.env.local` | browser Supabase client + middleware |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | — | no (public) | Vercel, `frontend/.env.local` | 〃 |
 
-## Hugging Face — remote inference (Phase 4.5)
+## Hugging Face — remote inference
 
 | Variable | Default | Secret | Where set | Purpose |
 |---|---|---|---|---|
@@ -84,7 +84,7 @@ option only).
 | `NEWS_LOOKBACK_DAYS` | `7` | no | rarely | headline window |
 | `NEWS_MAX_HEADLINES` | `12` | no | rarely | cap per run |
 
-## External data providers (Phase 6)
+## External data providers
 
 Optional market-data providers behind a capability-based abstraction
 (`backend/app/providers/`). Every provider **degrades to empty** when its key is
@@ -98,8 +98,8 @@ ship in `.env.example` / `render.yaml` (`sync: false`).
 | `ALPHA_VANTAGE_API_KEY` | *(empty)* | **yes** | local, Render (`sync: false`) | Alpha Vantage — company-overview fallback for research profiles. Absent = provider skipped |
 | `ALPHA_VANTAGE_DAILY_CAP` | `20` | no | rarely | soft request budget per day (free tier hard limit is 25); the provider stops calling past this |
 | `PROVIDER_PRIORITY` | `yfinance,finnhub,alpha_vantage,newsapi` | no | rarely | comma-separated order the registry tries providers, left-to-right, per capability |
-| `MARKETSTACK_API_KEY` | *(empty)* | **yes** | local only | Reserved intraday provider (Phase 6.5). **Free tier is EOD-only** — intraday needs a paid plan. Not wired to a live path; kept for a future paid upgrade |
-| `ALPHA_VANTAGE_INTRADAY_KEY` | *(empty)* | **yes** | local only | Reserved Alpha-Vantage key for intraday (Phase 6.5). **Alpha Vantage intraday is a premium endpoint** on the free tier. Not wired to a live path |
+| `MARKETSTACK_API_KEY` | *(empty)* | **yes** | local only | Reserved intraday provider. **Free tier is EOD-only** — intraday needs a paid plan. Not wired to a live path; kept for a future paid upgrade |
+| `ALPHA_VANTAGE_INTRADAY_KEY` | *(empty)* | **yes** | local only | Reserved Alpha-Vantage key for intraday. **Alpha Vantage intraday is a premium endpoint** on the free tier. Not wired to a live path |
 
 **Phase 6.5 intraday note:** the chart's intraday intervals (1m/5m/15m/30m/1H)
 are served by **keyless yfinance** (`app/services/ohlcv.py`, on-demand + 60s
@@ -108,7 +108,7 @@ cached, not persisted). The three keys the owner supplied for intraday
 intraday behind paid plans, so they're stored for a future upgrade but the
 platform uses yfinance today.
 
-## Market expansion (Phase 6)
+## Market expansion
 
 Whole-market lazy loading: symbols outside the curated Nifty-100 catalog are
 tracked on demand (search → track → durable `ingest_jobs` queue → backfill).
@@ -125,7 +125,7 @@ India-only — NSE/BSE-suffixed symbols.
 | `ENABLE_SCHEDULER` | `true` | no | Render (`true`) | APScheduler master switch (daily ingest + Space keep-warm) |
 | `DAILY_INGEST_HOUR` / `DAILY_INGEST_MINUTE` | `13` / `0` | no | rarely | UTC daily ingest time (~post-IST close) |
 | `DEFAULT_HISTORY_DAYS` | `1095` | no | rarely | initial backfill window |
-| `INGEST_PAUSE_SECONDS` | `0.3` | no | rarely | sleep between per-instrument OHLCV fetches — throttles yfinance and smooths Render RAM during large backfills (Phase 6) |
+| `INGEST_PAUSE_SECONDS` | `0.3` | no | rarely | sleep between per-instrument OHLCV fetches — throttles yfinance and smooths Render RAM during large backfills |
 | `DEFAULT_FORECASTER` | `kronos` | no | Render | forecaster when the request omits `model` |
 | `AGENTS_DEBATE_ROUNDS` | `1` | no | rarely | bull/bear debate depth |
 | `MAX_POSITION_PCT` | `10` | no | rarely | coded risk cap (LLMs can only tighten) |
@@ -137,7 +137,7 @@ India-only — NSE/BSE-suffixed symbols.
 | `AGENT_RUN_STALE_MINUTES` | `30` | no | rarely | startup orphan sweep threshold |
 | `MEMORY_TTL_DAYS` | `90` | no | rarely | embedding retention |
 
-## Paper trading / research / evaluation (Phase 5)
+## Paper trading / research / evaluation
 
 All have safe defaults — no deploy-time action was required for Phase 5.
 
@@ -146,7 +146,7 @@ All have safe defaults — no deploy-time action was required for Phase 5.
 | `SIM_STARTING_CASH` | `1000000` | no | rarely | paper-portfolio starting cash (INR) for newly created portfolios |
 | `FUNDAMENTALS_TTL_HOURS` | `24` | no | rarely | yfinance fundamentals cache TTL (`instrument_fundamentals`) |
 | `ENABLE_NEWS_INGEST` | `true` | no | Render | daily scheduler job persisting headlines into the news-RAG corpus |
-| `NEWS_INGEST_DAILY_CAP` | `60` | no | rarely | max provider news requests per daily news job — quota guard; the job selects held/watched symbols first, then rotates the rest (Phase 6) |
+| `NEWS_INGEST_DAILY_CAP` | `60` | no | rarely | max provider news requests per daily news job — quota guard; the job selects held/watched symbols first, then rotates the rest |
 | `NEWS_RAG_TOP_K` | `5` | no | rarely | news headlines retrieved per chat message (citations) |
 | `NEWS_RETENTION_DAYS` | `180` | no | rarely | news documents older than this are purged by the ingest job |
 | `LLM_COST_INPUT_PER_1M` | `0.30` | no | rarely | USD per 1M input tokens — cost estimation in `/evaluation/summary` only |

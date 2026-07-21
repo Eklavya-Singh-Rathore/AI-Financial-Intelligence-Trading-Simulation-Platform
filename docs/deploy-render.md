@@ -1,4 +1,4 @@
-# Backend deployment — Render (Phase 4.5)
+# Backend deployment — Render
 
 The backend runs as a **Render free-tier web service** built from
 [`backend/Dockerfile.render`](../backend/Dockerfile.render) — the slim image
