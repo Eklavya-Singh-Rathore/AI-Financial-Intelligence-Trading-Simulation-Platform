@@ -1,13 +1,16 @@
 # project_handover.md
 
 > **Single source of truth for resuming development** — self-contained; no prior
-> conversations needed. Last updated: **2026-07-21, Phase 6.5 SHIPPED** — all 5
-> stages merged to `main` (`2a04d01`), Render + Vercel deployed, production-
-> verified. The chart is now a trading workstation: intraday intervals
-> (1m–1H via yfinance), 7 chart types, 15 indicators + Volume Profile + picker +
-> presets, a canvas drawing-tools engine, a chart-docked order ticket (incl.
-> stop-limit), and support/resistance + AI-recommendation overlays. Migration
-> `0016_stop_limit` applied to Supabase (head is now `0016`). See §10.
+> conversations needed. Last updated: **2026-07-21, Phase 6.1 SHIPPED** — merged
+> to `main` (`e8f3fba`), Render + Vercel deployed, production-verified. Phase 6.1:
+> (1) rotated the Gemini key + moved `GEMINI_MODEL` to the stable
+> `gemini-flash-latest` alias (the pinned `gemini-2.5-flash` 404s for new keys);
+> (2) a **Kronos variant registry** — `KRONOS_VARIANT` auto-selects **base for
+> local dev, small in production**; (3) **intraday forecasting** — the forecast
+> service is interval-aware (1m–1H via the ohlcv resolver, session-aware future
+> timestamps), migration `0017_intraday_forecasts` adds `forecasts.interval` +
+> `target_ts` (Supabase head is now `0017`). See §11. Prior: Phase 6.5 (trading
+> workstation) shipped at `2a04d01`, §10.
 
 ## 1. What this is
 
@@ -27,12 +30,12 @@ and **evaluates** its own AI quality (`/insights`). Phase 6 layers on a
 charting) and **external data providers** (Finnhub + Alpha Vantage).
 
 - Repo: https://github.com/Eklavya-Singh-Rathore/AI-Financial-Intelligence-Trading-Simulation-Platform
-  — `main` at **`2a04d01`** (Phase 6.5 complete, deployed). The Phase 6.5 branch
-  `claude/phase-6-5-professional-charting` == `main` and its worktree can be
-  deleted.
+  — `main` at **`e8f3fba`** (Phase 6.1 complete, deployed). Branch
+  `claude/phase-6-1-key-rotation-kronos` == `main`; its worktree + the older
+  Phase 6.5 worktree can be deleted.
 - DB/Auth: Supabase **`ai-stock-prediction`** (`rekoawsoghrjcimknkfz`, ap-south-1, PG 17)
 - **Live** (§7): Vercel frontend · Render backend · HF inference Space · Supabase —
-  serving **Phase 6.5** (full). Supabase head is `0016_stop_limit`.
+  serving **Phase 6.1**. Supabase head is `0017_intraday_forecasts`.
 - Docs: **`docs/MASTER_ARCHITECTURE.md`** (start here), `docs/architecture/`
   (7 docs), `docs/adr/` (ADR-0001..0006), `docs/deploy-render.md`,
   `docs/deploy-hf-space.md`, `docs/environment.md`, `README.md`.
@@ -313,3 +316,51 @@ types (Renko/Kagi/P&F/Line-Break/Range), Kronos confidence band. Paid intraday
 providers (`MARKETSTACK_API_KEY`, `ALPHA_VANTAGE_INTRADAY_KEY`) remain **local
 `.env` only** (not in `.env.example`/`render.yaml`) — the free tiers can't do
 intraday, so yfinance serves it; wire them if a paid plan is ever obtained.
+
+## 11. Phase 6.1 — key rotation, Kronos variants, intraday forecasting (SHIPPED)
+
+**Merged to `main` at `e8f3fba`** (2026-07-21); Render deploy
+`dep-d9fh506rnols73bv3mug`, Vercel auto; Supabase head `0017_intraday_forecasts`.
+
+**Task 1 — Gemini key rotation.** Rotated `GOOGLE_AI_STUDIO_API_KEY` in the
+git-ignored root `.env` and on Render (runtime only — never committed;
+`.env.example`/`render.yaml` stay placeholders). The provided key authenticates
+fine, but the configured `gemini-2.5-flash` **404s for new keys** ("no longer
+available to new users"), so `GEMINI_MODEL` now defaults to the stable
+`gemini-flash-latest` alias (config.py + `.env.example` + Render env). Verified:
+local `google-genai` call + a prod `/chat` round-trip (200, cleaned up). **The key
+looks free-tier** (gemini-2.0-flash already 429s on it) — watch rate limits under
+agent load; the OpenAI fallback key is set on Render.
+
+**Task 3 — env-based Kronos variant.** `app/ml/kronos_variants.py` maps
+`mini|small|base` → Hub ids (only these are published NeoQuasar checkpoints;
+"tiny"/"large" are a *different* model family, deliberately absent).
+`KRONOS_VARIANT` empty = **auto by `ENV`**: base for local dev, small in
+production. `resolve_kronos_config` feeds both Kronos forecasters + `/health`;
+`KRONOS_MODEL_ID`/`_TOKENIZER_ID`/`_MAX_CONTEXT` remain per-field overrides. Local
+`.env` set to `KRONOS_VARIANT=base`; **Render needs no change** (ENV=production →
+auto small); the HF Space is unchanged (still small, its own `app.py`). Base
+loads+forecasts locally (validated).
+
+**Task 2 — intraday forecasting.** `run_forecast` gained an `interval` param: it
+sources bars via the `ohlcv` resolver and generates interval-correct future
+timestamps (`ohlcv.future_timestamps` — business days / NSE session-aware intraday
+steps / resample anchor), passed into the forecaster via `resolve_target_timestamps`
+so Kronos sees the right temporal context (Kronos is timeframe-agnostic — the
+daily-only limit was platform wiring, not the model). Migration `0017` adds
+`forecasts.interval` + `target_ts`; evaluation's daily accuracy join filters
+`interval='1D'`. Endpoint + `ForecastOut`/`ForecastPoint` gained `interval` +
+`target_time`; the chart overlay now renders on every interval (maps `target_time`
+for intraday). The UI requests `persist=false` for display (as daily always did);
+persistence is fully supported for `persist=true`. Verified: real e2e (RELIANCE
+1D/5m/15m/1H) + a persisted 5m row (interval/target_ts correct, cleaned up).
+
+**Migration 0017 applied to Supabase via direct ALTER + version stamp** (same
+pooler/asyncpg prepared-stmt limitation as 0016; CI proves the chain on vanilla
+PG). Gates: backend ruff/mypy/bandit + 262 fast tests; frontend tsc + 60 tests +
+build.
+
+**Deferred (Phase 6.1):** intraday forecast *accuracy* eval (no stored intraday
+actuals to mature against — daily-only by design); a paid/keyed Gemini tier if the
+free key rate-limits under load. The paid intraday-data keys stay deferred as
+before (yfinance serves intraday).
