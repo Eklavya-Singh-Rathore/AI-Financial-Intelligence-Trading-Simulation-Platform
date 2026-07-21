@@ -354,10 +354,14 @@ export function DrawingCanvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drawings, selectedId, showVolumeProfile, bars, tool, levels]);
 
+  // z-20: lightweight-charts renders its pane canvases at z-index 1-2, so without
+  // an explicit higher z-index this overlay sits BENEATH them — pointer events
+  // (with a tool active) hit the chart instead of this canvas, and drawings paint
+  // behind the candles. z-20 keeps it above the chart yet below the tool rail (z-30).
   return (
     <canvas
       ref={canvasRef}
-      className="absolute inset-0 h-full w-full"
+      className="absolute inset-0 z-20 h-full w-full"
       style={{ pointerEvents: tool ? "auto" : "none", cursor: tool && tool !== "select" ? "crosshair" : "default" }}
     />
   );
