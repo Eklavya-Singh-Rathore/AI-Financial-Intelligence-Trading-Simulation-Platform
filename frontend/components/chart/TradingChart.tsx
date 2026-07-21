@@ -232,7 +232,7 @@ export function TradingChart({
   const cardRef = useRef<HTMLDivElement>(null);
   const [isFs, setIsFs] = useState(false);
 
-  const { containerRef, legend, setRange: applyRange, chartRef, getMain } = useTradingChart({
+  const { containerRef, legend, setRange: applyRange, chartRef, getMain, ready } = useTradingChart({
     bars,
     indicators,
     activeIndicators: enabledDefs(enabled),
@@ -383,6 +383,7 @@ export function TradingChart({
           <DrawingCanvas
             chartRef={chartRef}
             getMain={getMain}
+            ready={ready}
             tool={tool}
             drawings={drawings}
             selectedId={selectedId}

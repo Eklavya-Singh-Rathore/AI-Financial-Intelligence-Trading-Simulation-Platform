@@ -34,6 +34,9 @@ type Bar = { date: string; high: number; low: number; close: number; volume: num
 type Props = {
   chartRef: RefObject<IChartApi | null>;
   getMain: () => ISeriesApi<SeriesType> | null;
+  /** True once the chart instance exists — the pointer/redraw wiring keys off
+   *  this so it attaches after creation, even when the canvas mounts first. */
+  ready: boolean;
   tool: DrawTool | null;
   drawings: Drawing[];
   selectedId: string | null;
@@ -50,6 +53,7 @@ const uid = () => Math.random().toString(36).slice(2, 10);
 export function DrawingCanvas({
   chartRef,
   getMain,
+  ready,
   tool,
   drawings,
   selectedId,
@@ -314,7 +318,9 @@ export function DrawingCanvas({
     }
   };
 
-  // wire pointer + redraw
+  // Wire pointer + redraw. Keyed on `ready` (not chartRef.current) so it runs
+  // once the chart exists — the canvas can mount before the chart is created,
+  // and a ref assignment alone would never re-run this effect.
   useEffect(() => {
     const canvas = canvasRef.current;
     const chart = chartRef.current;
@@ -340,7 +346,7 @@ export function DrawingCanvas({
       cancelAnimationFrame(raf);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chartRef.current]);
+  }, [ready]);
 
   // redraw when data/selection/tool change
   useEffect(() => {

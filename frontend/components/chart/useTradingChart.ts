@@ -103,6 +103,11 @@ export function useTradingChart({
   const dataRef = useRef({ bars, indicators });
   const { resolvedTheme } = useTheme();
   const [legend, setLegend] = useState<OhlcLegend | null>(null);
+  // Flips true once the chart instance exists. Consumers (the drawing overlay)
+  // depend on this so they wire up AFTER creation — a ref alone can't, since
+  // assigning chartRef.current triggers no re-render and the overlay can mount
+  // in the same commit as (i.e. before) the chart is created.
+  const [ready, setReady] = useState(false);
 
   dataRef.current = { bars, indicators };
 
@@ -146,8 +151,10 @@ export function useTradingChart({
       });
     };
     chart.subscribeCrosshairMove(onMove);
+    setReady(true);
 
     return () => {
+      setReady(false);
       chart.unsubscribeCrosshairMove(onMove);
       chart.remove();
       chartRef.current = null;
@@ -408,5 +415,5 @@ export function useTradingChart({
 
   const getMain = useCallback(() => series.current.get("main") ?? null, []);
 
-  return { containerRef, legend, setRange, chartRef, getMain };
+  return { containerRef, legend, setRange, chartRef, getMain, ready };
 }
