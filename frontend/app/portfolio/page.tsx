@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { Banknote, Coins, TrendingUp, Wallet } from "lucide-react";
 import { useState } from "react";
 import Link from "next/link";
 import { AllocationBars } from "@/components/sim/AllocationBars";
@@ -64,10 +65,34 @@ export default function PortfolioPage() {
       {p && (
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <Stat label="Equity" value={`₹${fmtNum(p.equity)}`} sub={`started ₹${fmtNum(p.starting_cash)}`} />
-            <Stat label="Cash" value={`₹${fmtNum(p.cash)}`} sub={`${p.cash_allocation_pct.toFixed(1)}% of equity`} />
-            <Stat label="Total P&L" value={`₹${fmtNum(p.total_pnl)}`} deltaPct={p.total_pnl_pct} />
-            <Stat label="Realized P&L" value={`₹${fmtNum(p.realized_pnl)}`} />
+            <Stat
+              label="Equity"
+              value={`₹${fmtNum(p.equity)}`}
+              deltaPct={p.total_pnl_pct}
+              icon={<Wallet size={14} />}
+              tone="accent"
+              sub={`Started ₹${fmtNum(p.starting_cash)}`}
+            />
+            <Stat
+              label="Cash"
+              value={`₹${fmtNum(p.cash)}`}
+              icon={<Banknote size={14} />}
+              tone="accent"
+              sub={`${p.cash_allocation_pct.toFixed(1)}% of equity`}
+            />
+            <Stat
+              label="Total P&L"
+              value={`₹${fmtNum(p.total_pnl)}`}
+              deltaPct={p.total_pnl_pct}
+              icon={<TrendingUp size={14} />}
+              tone={p.total_pnl >= 0 ? "gain" : "loss"}
+            />
+            <Stat
+              label="Realized P&L"
+              value={`₹${fmtNum(p.realized_pnl)}`}
+              icon={<Coins size={14} />}
+              tone="accent"
+            />
           </div>
 
           {!hasPositions && (

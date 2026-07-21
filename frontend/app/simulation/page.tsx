@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bot } from "lucide-react";
+import { Bot, Layers, TrendingUp, Wallet, Zap } from "lucide-react";
 import { useState } from "react";
 import clsx from "clsx";
 import Link from "next/link";
@@ -51,10 +51,34 @@ export default function SimulationPage() {
       {portfolio.error && <p className="text-sm text-loss">{String(portfolio.error)}</p>}
       {p && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Stat label="Equity" value={`₹${fmtNum(p.equity)}`} />
-          <Stat label="Buying power" value={`₹${fmtNum(p.buying_power)}`} />
-          <Stat label="Total P&L" value={`₹${fmtNum(p.total_pnl)}`} deltaPct={p.total_pnl_pct} />
-          <Stat label="Positions" value={String(p.positions.length)} />
+          <Stat
+            label="Equity"
+            value={`₹${fmtNum(p.equity)}`}
+            deltaPct={p.total_pnl_pct}
+            icon={<Wallet size={14} />}
+            tone="accent"
+          />
+          <Stat
+            label="Buying power"
+            value={`₹${fmtNum(p.buying_power)}`}
+            icon={<Zap size={14} />}
+            tone="accent"
+            sub={p.equity ? `${((p.buying_power / p.equity) * 100).toFixed(0)}% of equity` : undefined}
+          />
+          <Stat
+            label="Total P&L"
+            value={`₹${fmtNum(p.total_pnl)}`}
+            deltaPct={p.total_pnl_pct}
+            icon={<TrendingUp size={14} />}
+            tone={p.total_pnl >= 0 ? "gain" : "loss"}
+          />
+          <Stat
+            label="Positions"
+            value={String(p.positions.length)}
+            icon={<Layers size={14} />}
+            tone="accent"
+            sub="Active positions"
+          />
         </div>
       )}
       {actionError != null && <p className="text-sm text-loss">{String(actionError)}</p>}

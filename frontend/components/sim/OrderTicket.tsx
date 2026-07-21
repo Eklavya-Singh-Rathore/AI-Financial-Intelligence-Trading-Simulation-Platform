@@ -1,11 +1,19 @@
 "use client";
 
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { Send } from "lucide-react";
 import { useState } from "react";
 import clsx from "clsx";
 import { Button, Input, Select } from "@/components/ui";
 import { api, fmtNum, type OrderCreate } from "@/lib/api";
 import { validateOrder } from "@/lib/orderTicket.mjs";
+
+const ORDER_TYPE_LABEL: Record<OrderCreate["order_type"], string> = {
+  market: "Market",
+  limit: "Limit",
+  stop: "Stop",
+  stop_limit: "Stop-Limit",
+};
 
 /** Order entry with live cost estimate + buying-power pre-validation (Phase 6).
  *  `defaultSymbol` pre-fills the symbol (chart-docked ticket, Phase 6.5). */
@@ -106,12 +114,19 @@ export function OrderTicket({
       {place.error && <p className="text-xs text-loss">{String(place.error)}</p>}
 
       <Button
-        variant={form.side === "buy" ? "primary" : "danger"}
+        variant={form.side === "buy" ? "gradient" : "danger"}
         onClick={() => place.mutate()}
         disabled={!canSubmit}
-        className={clsx("w-full", form.side === "buy" && "bg-gain")}
+        className={clsx("h-11 w-full text-sm", form.side === "buy" && "bg-grad-buy")}
       >
-        {place.isPending ? "…" : `${form.side} ${form.symbol.trim().toUpperCase() || "…"}`}
+        {place.isPending ? (
+          "…"
+        ) : (
+          <>
+            <Send size={15} />
+            {form.side === "buy" ? "Buy" : "Sell"} — {ORDER_TYPE_LABEL[form.order_type]} Order
+          </>
+        )}
       </Button>
       <p className="text-[11px] leading-snug text-ink-3">
         Market fills at the latest stored close; limit/stop orders rest and trigger on daily bars.
