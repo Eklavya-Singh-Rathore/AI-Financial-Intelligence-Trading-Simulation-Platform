@@ -350,6 +350,11 @@ export const api = {
     request<Watchlist>(`watchlists/${id}/items/${encodeURIComponent(symbol)}`, {
       method: "DELETE",
     }),
+  reorderWatchlist: (id: string, symbols: string[]) =>
+    request<Watchlist>(`watchlists/${id}/order`, {
+      method: "PATCH",
+      body: JSON.stringify({ symbols }),
+    }),
   profile: (symbol: string) =>
     request<CompanyProfile>(`instruments/${encodeURIComponent(symbol)}/profile`),
   financials: (symbol: string, period: string, statement: string) =>

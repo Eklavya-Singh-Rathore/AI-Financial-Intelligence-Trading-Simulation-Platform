@@ -176,6 +176,30 @@ async def remove_item(session: AsyncSession, wl: Watchlist, symbol: str) -> bool
     return True
 
 
+async def reorder_items(session: AsyncSession, wl: Watchlist, symbols: list[str]) -> list[str]:
+    """Set item positions to the given symbol order.
+
+    ``symbols`` must be exactly the list's current members (any order); a
+    mismatch (stale client, unknown symbol) raises so the caller refetches.
+    Returns the persisted order.
+    """
+    rows = (
+        await session.execute(
+            select(WatchlistItem, Instrument.symbol)
+            .join(Instrument, Instrument.id == WatchlistItem.instrument_id)
+            .where(WatchlistItem.watchlist_id == wl.id)
+        )
+    ).all()
+    item_by_symbol = {symbol: item for item, symbol in rows}
+    wanted = [s.strip().upper() for s in symbols]
+    if len(set(wanted)) != len(wanted) or set(wanted) != set(item_by_symbol):
+        raise WatchlistError("reorder must list exactly the current members, once each")
+    for pos, symbol in enumerate(wanted):
+        item_by_symbol[symbol].position = pos
+    await session.commit()
+    return wanted
+
+
 async def watchlist_instrument_ids(
     session: AsyncSession, user_id: uuid.UUID | None, watchlist_id: uuid.UUID
 ) -> list[uuid.UUID]:

@@ -1,10 +1,11 @@
 "use client";
 
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { LayoutGrid, Minus, Plus, RefreshCw, Search, Trash2, TrendingDown, TrendingUp } from "lucide-react";
+import { LayoutGrid, Minus, Plus, RefreshCw, Search, SlidersHorizontal, Trash2, TrendingDown, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
+import { WatchlistManager } from "@/components/WatchlistManager";
 import { WatchlistStar } from "@/components/WatchlistStar";
 import {
   Badge,
@@ -39,6 +40,7 @@ export default function Dashboard() {
   const [sort, setSort] = useState<SortState>(null);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
+  const [manageOpen, setManageOpen] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setQDebounced(q.trim()), 300);
@@ -183,18 +185,30 @@ export default function Dashboard() {
           </Button>
         )}
         {activeList && (
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-ink-3 hover:text-loss"
-            title={`Delete "${activeList.name}"`}
-            onClick={() => deleteList.mutate(activeList.id)}
-            disabled={deleteList.isPending}
-          >
-            <Trash2 size={14} />
-          </Button>
+          <>
+            <Button size="sm" variant="ghost" onClick={() => setManageOpen(true)}>
+              <SlidersHorizontal size={14} /> Manage
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-ink-3 hover:text-loss"
+              title={`Delete "${activeList.name}"`}
+              onClick={() => deleteList.mutate(activeList.id)}
+              disabled={deleteList.isPending}
+            >
+              <Trash2 size={14} />
+            </Button>
+          </>
         )}
       </div>
+      {activeList && (
+        <WatchlistManager
+          watchlist={activeList}
+          open={manageOpen}
+          onClose={() => setManageOpen(false)}
+        />
+      )}
       {createList.error && <p className="text-xs text-loss">{createList.error.message}</p>}
 
       <div className="flex flex-wrap items-center gap-2">

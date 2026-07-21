@@ -20,6 +20,11 @@ class WatchlistItemAdd(BaseModel):
     symbol: str = Field(min_length=1, max_length=32)
 
 
+class WatchlistReorder(BaseModel):
+    # The list's members in their new order; must be exactly the current members.
+    symbols: list[str] = Field(min_length=1, max_length=500)
+
+
 class WatchlistOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

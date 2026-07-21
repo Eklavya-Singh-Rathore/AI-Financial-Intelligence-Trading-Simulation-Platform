@@ -14,6 +14,7 @@ from app.schemas.watchlist import (
     WatchlistCreate,
     WatchlistItemAdd,
     WatchlistOut,
+    WatchlistReorder,
     WatchlistUpdate,
 )
 from app.services import watchlists
@@ -66,7 +67,8 @@ async def rename_watchlist(
     except WatchlistError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     symbols = [
-        w["symbols"] for w in await watchlists.list_watchlists(session, auth.user_id)
+        w["symbols"]
+        for w in await watchlists.list_watchlists(session, auth.user_id)
         if w["id"] == wl.id
     ]
     return _out(wl, symbols[0] if symbols else [])
@@ -94,6 +96,21 @@ async def add_item(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     lists = await watchlists.list_watchlists(session, auth.user_id)
     symbols: list[str] = next((w["symbols"] for w in lists if w["id"] == wl.id), [])
+    return _out(wl, symbols)
+
+
+@router.patch("/{watchlist_id}/order", response_model=WatchlistOut)
+async def reorder_watchlist(
+    watchlist_id: uuid.UUID,
+    payload: WatchlistReorder,
+    auth: Auth,
+    session: AsyncSession = Depends(get_session),
+) -> WatchlistOut:
+    wl = await _watchlist_or_404(session, auth, watchlist_id)
+    try:
+        symbols = await watchlists.reorder_items(session, wl, payload.symbols)
+    except WatchlistError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return _out(wl, symbols)
 
 

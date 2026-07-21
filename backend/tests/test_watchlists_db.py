@@ -128,6 +128,44 @@ async def test_duplicate_name_and_unknown_symbol(session, seeded):
 
 
 @pytest.mark.asyncio
+async def test_reorder_sets_positions(session, seeded):
+    owner = uuid.uuid4()
+    inst2 = uuid.UUID("00000000-0000-4000-8000-000000000003")
+    await session.execute(
+        text(
+            "INSERT INTO instruments "
+            "(id, symbol, display_name, instrument_type, exchange_id, currency, country, status) "
+            "VALUES (:id, :sym, 'Test Instrument 2', 'equity', :ex, 'INR', 'IN', 'suspended') "
+            "ON CONFLICT (symbol) DO NOTHING"
+        ),
+        {"id": str(inst2), "sym": "TESTINST2", "ex": str(EXCHANGE_ID)},
+    )
+    await session.commit()
+    try:
+        wl = await watchlists.create_watchlist(session, owner, "TESTWL-order")
+        await watchlists.add_item(session, wl, SYMBOL)
+        await watchlists.add_item(session, wl, "TESTINST2")
+        # Members come back in insertion order (positions 1, 2).
+        lists = await watchlists.list_watchlists(session, owner)
+        assert lists[0]["symbols"] == [SYMBOL, "TESTINST2"]
+
+        new_order = await watchlists.reorder_items(session, wl, ["TESTINST2", SYMBOL])
+        assert new_order == ["TESTINST2", SYMBOL]
+        lists = await watchlists.list_watchlists(session, owner)
+        assert lists[0]["symbols"] == ["TESTINST2", SYMBOL]
+
+        # A set that is not exactly the members (missing, extra, or duplicated) is rejected.
+        with pytest.raises(WatchlistError):
+            await watchlists.reorder_items(session, wl, [SYMBOL])
+        with pytest.raises(WatchlistError):
+            await watchlists.reorder_items(session, wl, [SYMBOL, SYMBOL])
+        await watchlists.delete_watchlist(session, wl)
+    finally:
+        await session.execute(text("DELETE FROM instruments WHERE symbol = 'TESTINST2'"))
+        await session.commit()
+
+
+@pytest.mark.asyncio
 async def test_delete_cascades_items(session, seeded):
     owner = uuid.uuid4()
     wl = await watchlists.create_watchlist(session, owner, "TESTWL-cascade")
