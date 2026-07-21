@@ -78,14 +78,14 @@ function HealthDot({ compact = false }: { compact?: boolean }) {
 }
 
 /** NSE session status + IST clock (presentational; client-side, IST has no DST). */
-function MarketClock({ collapsed = false }: { collapsed?: boolean }) {
+function MarketClock() {
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
     setNow(new Date());
     const t = setInterval(() => setNow(new Date()), 30_000);
     return () => clearInterval(t);
   }, []);
-  if (!now) return <div className="h-8" />;
+  if (!now) return <div className="h-5 w-40" />;
   const istMs = now.getTime() + (now.getTimezoneOffset() + 330) * 60_000;
   const ist = new Date(istMs);
   const day = ist.getUTCDay();
@@ -97,34 +97,22 @@ function MarketClock({ collapsed = false }: { collapsed?: boolean }) {
     minute: "2-digit",
     hour12: true,
   });
-  const dot = (
-    <span
-      className={clsx(
-        "size-2 shrink-0 rounded-full",
-        open ? "bg-gain motion-safe:animate-pulse" : "bg-ink-3",
-      )}
-    />
-  );
-  if (collapsed) {
-    return (
-      <span className="mx-auto flex" title={`${open ? "Market open" : "Market closed"} · ${time} IST`}>
-        {dot}
-      </span>
-    );
-  }
   return (
-    <div className="flex items-center gap-2 px-1 text-xs">
-      {dot}
-      <div className="min-w-0 leading-tight">
-        <div className="font-medium text-ink-2">{open ? "Live Market" : "Market Closed"}</div>
-        <div className="tabular text-ink-3">{time} IST · NSE</div>
-      </div>
-    </div>
+    <span className="flex items-center gap-2 whitespace-nowrap text-xs">
+      <span
+        className={clsx(
+          "size-2 shrink-0 rounded-full",
+          open ? "bg-gain motion-safe:animate-pulse" : "bg-ink-3",
+        )}
+      />
+      <span className="font-medium text-ink-2">{open ? "Live Market" : "Market Closed"}</span>
+      <span className="tabular text-ink-3">{time} IST · NSE</span>
+    </span>
   );
 }
 
 /** Account avatar + dropdown (email, sign-out). Null when auth isn't configured. */
-function AccountMenu() {
+function AccountMenu({ menuSide = "bottom" }: { menuSide?: "top" | "bottom" }) {
   const router = useRouter();
   const [email, setEmail] = useState<string | null>(null);
   useEffect(() => {
@@ -142,6 +130,7 @@ function AccountMenu() {
   return (
     <DropdownMenu
       label="Account"
+      side={menuSide}
       triggerClassName="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
       trigger={<Avatar name={email} size="sm" />}
     >
@@ -242,47 +231,51 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen">
-      {/* Desktop sidebar */}
+      {/* Desktop sidebar — sticky: it stays put while only the main area scrolls. */}
       <aside
         className={clsx(
-          "hidden shrink-0 flex-col border-r border-line bg-surface-2 p-3 lg:flex",
+          "sticky top-0 hidden h-screen shrink-0 flex-col overflow-y-auto border-r border-line bg-surface-2 p-3 lg:flex",
           collapsed ? "w-16" : "w-60",
         )}
       >
-        <div className={clsx("mb-5 flex items-center px-1", collapsed ? "justify-center" : "justify-start")}>
+        {/* Header: brand + collapse toggle beside it */}
+        <div className={clsx("mb-5 flex items-center gap-2", collapsed ? "flex-col" : "justify-between px-1")}>
           <Brand collapsed={collapsed} />
-        </div>
-        <NavList pathname={pathname} collapsed={collapsed} />
-        <div className="mt-auto flex flex-col gap-3 pt-4">
-          <div className={clsx("rounded-lg border border-line bg-surface p-2", collapsed && "px-0")}>
-            <MarketClock collapsed={collapsed} />
-          </div>
           <button
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             title={collapsed ? "Expand" : "Collapse"}
             onClick={toggleCollapsed}
-            className={clsx(
-              "grid h-8 place-items-center rounded-lg border border-line text-ink-2 transition-colors hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
-              collapsed ? "mx-auto w-8" : "w-full",
-            )}
+            className="grid size-8 shrink-0 place-items-center rounded-lg border border-line text-ink-2 transition-colors hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
           >
             {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
           </button>
+        </div>
+        <NavList pathname={pathname} collapsed={collapsed} />
+        {/* Footer: system controls — backend health, theme, account. */}
+        <div
+          className={clsx(
+            "mt-auto flex items-center gap-2 border-t border-line pt-3",
+            collapsed ? "flex-col" : "justify-between px-1",
+          )}
+        >
+          <HealthDot compact={collapsed} />
+          <div className={clsx("flex items-center gap-1.5", collapsed && "flex-col")}>
+            <ThemeToggle />
+            <AccountMenu menuSide="top" />
+          </div>
         </div>
       </aside>
 
       {/* Content column */}
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Desktop topbar */}
+        {/* Desktop topbar — search (centered) + live market status (right). */}
         <header className="sticky top-0 z-30 hidden h-14 items-center gap-4 border-b border-line bg-surface/80 px-6 backdrop-blur-xl lg:flex">
           <div className="hidden flex-1 lg:block" />
           <div className="w-full max-w-xl">
             <SearchTrigger className="w-full justify-start" />
           </div>
-          <div className="flex flex-1 items-center justify-end gap-2.5">
-            <HealthDot compact />
-            <ThemeToggle />
-            <AccountMenu />
+          <div className="flex flex-1 items-center justify-end">
+            <MarketClock />
           </div>
         </header>
 

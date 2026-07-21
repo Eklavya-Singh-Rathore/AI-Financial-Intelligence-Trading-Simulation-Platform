@@ -75,8 +75,8 @@ export function SearchTrigger({ className }: { className?: string }) {
         className,
       )}
     >
-      <Search size={13} /> Search
-      <kbd className="tabular ml-1 rounded border border-line px-1 text-[10px]">⌘K</kbd>
+      <Search size={13} className="shrink-0" /> Search instruments, indices, assets...
+      <kbd className="tabular ml-auto rounded border border-line px-1 text-[10px]">⌘K</kbd>
     </button>
   );
 }

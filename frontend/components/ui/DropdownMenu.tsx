@@ -8,13 +8,23 @@ type Props = {
   trigger: ReactNode;
   children: ReactNode;
   align?: "start" | "end";
+  /** Open below (default) or above the trigger — use "top" for footer menus. */
+  side?: "top" | "bottom";
   triggerClassName?: string;
   className?: string;
   label?: string;
 };
 
 /** Click-toggled menu with outside-click + Escape close. No dependency. */
-export function DropdownMenu({ trigger, children, align = "end", triggerClassName, className, label }: Props) {
+export function DropdownMenu({
+  trigger,
+  children,
+  align = "end",
+  side = "bottom",
+  triggerClassName,
+  className,
+  label,
+}: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -51,7 +61,8 @@ export function DropdownMenu({ trigger, children, align = "end", triggerClassNam
           role="menu"
           onClick={() => setOpen(false)}
           className={cn(
-            "absolute z-50 mt-1.5 min-w-44 origin-top rounded-xl border border-line bg-surface p-1 shadow-lg animate-scale-in",
+            "absolute z-50 min-w-44 rounded-xl border border-line bg-surface p-1 shadow-lg animate-scale-in",
+            side === "top" ? "bottom-full mb-1.5 origin-bottom" : "top-full mt-1.5 origin-top",
             align === "end" ? "right-0" : "left-0",
             className,
           )}
