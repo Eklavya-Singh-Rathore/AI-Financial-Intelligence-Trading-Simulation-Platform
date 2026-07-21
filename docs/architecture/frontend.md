@@ -2,7 +2,7 @@
 
 **Next.js 15** (App Router, TypeScript) + Tailwind v4 + TanStack Query +
 TradingView `lightweight-charts` + `next-themes` (system-adaptive light/dark).
-Deployed on Vercel (project root `frontend/`). **Phase 6** adds a CSS-var
+Deployed on Vercel (project root `frontend/`). It uses a CSS-var
 **design-token system** and a hand-built primitive library (`components/ui/*` —
 Card, Stat, Table, Badge, Button, Input, Select, Tabs, Sheet, EmptyState,
 Skeleton, Spinner), a responsive **app shell** with a mobile drawer, a Cmd/Ctrl-K
@@ -51,12 +51,12 @@ rebuild-on-every-render `CandleChart`), `assistant/AssistantDock`,
 lives in `lib/*.mjs` with `node:test` coverage; API layer in `lib/api.ts`;
 Supabase browser client in `lib/supabase.ts`.
 
-**Charting (Phase 6.5 trading workstation).** All chart wiring is isolated in
+**Charting (trading workstation).** All chart wiring is isolated in
 `components/chart/` — the `useTradingChart` hook creates the lightweight-charts
 instance once and reconciles series from data (the persisted-instance pattern);
 `TradingChart` owns the toolbar. lightweight-charts was chosen because no
-TradingView **Charting Library** license was available (re-audited in Phase 6.5,
-still unavailable). Phase 6.5 adds: **intervals** 1m–1M (intraday from yfinance
+TradingView **Charting Library** license was available (re-audited,
+still unavailable). The workstation adds: **intervals** 1m–1M (intraday from yfinance
 via the backend `ohlcv` resolver, on-demand + cached; daily stored; W/M
 resampled — `lib/chartIntervals.mjs`); **7 chart types** (candles/hollow/bar/
 line/area/baseline/Heikin-Ashi); a **data-driven indicator catalog**

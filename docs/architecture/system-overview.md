@@ -10,7 +10,7 @@ pipeline** producing risk-limited recommendations, **explains** them, lets users
 **paper-trade** them (human-in-the-loop) with **portfolio analytics**
 (VaR/Monte-Carlo/optimization), serves company **research** (profiles/financials/
 earnings), grounds chat (full page + a site-wide floating dock) in market data +
-persisted **news with citations**, and **evaluates** its own AI quality. Phase 6
+persisted **news with citations**, and **evaluates** its own AI quality. It also
 adds a **professional UI** and **external data providers** (Finnhub + Alpha
 Vantage). Single-document reference:
 [../MASTER_ARCHITECTURE.md](../MASTER_ARCHITECTURE.md).
@@ -74,7 +74,7 @@ The same shape applies to backtests (NautilusTrader in-process), agent runs
 Real trading/order execution; notifications (permanently out of scope);
 document uploads for RAG (news-only corpus, owner decision); multi-tenant RLS
 policies (all data access is mediated by the backend, which enforces ownership
-in application code). Deferred in Phase 6 (abstractions ready): streaming
+in application code). Deferred (abstractions ready): streaming
 assistant responses; Reddit/Twitter-X sentiment + OpenBB providers; correlated
 Monte-Carlo; the official TradingView Charting Library. (The durable job queue,
-formerly future work, shipped in Phase 6 as `ingest_jobs`.)
+formerly future work, now shipped as `ingest_jobs`.)

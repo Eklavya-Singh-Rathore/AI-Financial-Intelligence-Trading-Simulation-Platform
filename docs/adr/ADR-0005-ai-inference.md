@@ -1,7 +1,7 @@
 # ADR-0005: Remote AI inference via a Hugging Face Space
 
 - **Status:** Accepted
-- **Date:** 2026 (Phase 4.5; packaging revised Phase 4.5)
+- **Date:** 2026
 
 ## Context
 

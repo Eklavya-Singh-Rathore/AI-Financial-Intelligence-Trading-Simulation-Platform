@@ -1,7 +1,7 @@
 # ADR-0001: Modular monolith
 
 - **Status:** Accepted
-- **Date:** 2026 (Phase 1; reaffirmed Phase 4.6)
+- **Date:** 2026
 
 ## Context
 
@@ -27,7 +27,7 @@ same-origin proxy.
   microservice overhead (e.g. `kronos` local↔remote is a config switch).
 - **−** Single process shares a fault domain and scaling unit; long jobs (agent
   runs) use `BackgroundTasks` rather than a durable queue.
-- **→** Phase 5 may extract a durable job queue if autonomous/scheduled runs
+- **→** A durable job queue may later be extracted if autonomous/scheduled runs
   demand it — the registry seam makes that incremental. The one piece already
   extracted is **ML inference** (to a Hugging Face Space), driven by hosting RAM
   limits, not by architectural preference — see [ADR-0005](ADR-0005-ai-inference.md).

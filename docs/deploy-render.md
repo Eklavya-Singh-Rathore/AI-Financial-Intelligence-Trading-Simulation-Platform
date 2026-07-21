@@ -62,7 +62,7 @@ requests reach Render.
 3. Apply. First build takes a few minutes; the service URL is
    `https://<service-name>.onrender.com`.
 
-### Path B — REST API (what Phase 4.5 used)
+### Path B — REST API
 
 With a Render API key (`rnd_...`):
 

@@ -88,7 +88,7 @@ inference client (`app/services/space_client.py`) follows the same pattern.
 | `GET /simulation/analytics/{risk,montecarlo,optimization}` | portfolio analytics — VaR, Monte-Carlo GBM, mean-variance frontier |
 | `GET/POST/PATCH/DELETE /watchlists/*` | per-user watchlists CRUD |
 | `GET /market/search` · `POST /market/track` · `GET /market/track/{s}/status` | whole-market lazy load: search → track → durable queue |
-| `GET /admin/catalog` · `POST /admin/catalog/sync` | curated-catalog plan + idempotent sync (privileged; Phase 6) |
+| `GET /admin/catalog` · `POST /admin/catalog/sync` | curated-catalog plan + idempotent sync (privileged) |
 | `GET /evaluation/summary` | forecast accuracy, agent stats, recommendation success, usage & cost |
 
 Every business route depends on `get_auth`; routes are dual-mounted at `/` and

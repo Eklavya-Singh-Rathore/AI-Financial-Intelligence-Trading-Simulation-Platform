@@ -1,7 +1,7 @@
 # ADR-0003: In-process agent orchestrator with coded risk limits
 
 - **Status:** Accepted
-- **Date:** 2026 (Phase 2; hardened Phase 2.5)
+- **Date:** 2026
 
 ## Context
 
@@ -31,5 +31,5 @@ prompt boundaries.
 - **−** `BackgroundTasks` is not durable — a crash mid-run loses in-flight work
   (the sweep marks it failed; the user re-runs). Throughput is bounded by the
   single process and the LLM provider's rate limits.
-- **→** A durable job queue is the main Phase 5 candidate (needed for scheduled
+- **→** A durable job queue is the main future candidate (needed for scheduled
   autonomous runs).

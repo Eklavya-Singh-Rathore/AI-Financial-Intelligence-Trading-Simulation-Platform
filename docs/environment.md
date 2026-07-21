@@ -52,7 +52,7 @@ app boots with partial config and degrades explicitly).
 | `INFERENCE_MAX_RETRIES` | `2` | no | rarely | extra attempts for transient failures |
 | `INFERENCE_RETRY_BACKOFF_SECONDS` | `1.5` | no | rarely | backoff base (jittered) |
 | `INFERENCE_WAKE_MAX_WAIT_SECONDS` | `180` | no | rarely | total budget while a slept Space returns 503 |
-| `KRONOS_VARIANT` | `` (auto) | no | local (`base`) | `mini`\|`small`\|`base`; empty = auto by `ENV` (base for dev, small for prod). Phase 6.1 |
+| `KRONOS_VARIANT` | `` (auto) | no | local (`base`) | `mini`\|`small`\|`base`; empty = auto by `ENV` (base for dev, small for prod). |
 | `KRONOS_MODEL_ID` | `` (from variant) | no | override only | pin a checkpoint id; overrides the variant (back-compat) |
 | `KRONOS_TOKENIZER_ID` | `` (from variant) | no | override only | pin a tokenizer id; overrides the variant |
 | `KRONOS_MAX_CONTEXT` | `0` (from variant) | no | override only | pin the context window; overrides the variant |
@@ -71,7 +71,7 @@ option only).
 | `LLM_PROVIDER` | `gemini` | no | local, Render | primary provider (`gemini` \| `openai` \| `fake`) |
 | `LLM_FALLBACK_PROVIDER` | `openai` | no | local, Render | automatic failover target (empty = none) |
 | `GOOGLE_AI_STUDIO_API_KEY` | — | **yes** | local, Render | Gemini key |
-| `GEMINI_MODEL` | `gemini-flash-latest` | no | local, Render | Gemini model id. Phase 6.1 default is the stable `-latest` alias: pinned versions (e.g. `gemini-2.5-flash`) get retired for new API keys and then 404 |
+| `GEMINI_MODEL` | `gemini-flash-latest` | no | local, Render | Gemini model id. The default is the stable `-latest` alias: pinned versions (e.g. `gemini-2.5-flash`) get retired for new API keys and then 404 |
 | `OPENAI_API_KEY` | — | **yes** | local, Render | OpenAI key (fallback; currently unfunded — see handover) |
 | `OPENAI_MODEL` | `gpt-4o-mini` | no | local, Render | OpenAI model id |
 | `LLM_TIMEOUT_SECONDS` | `90` | no | rarely | per-call timeout |
@@ -101,7 +101,7 @@ ship in `.env.example` / `render.yaml` (`sync: false`).
 | `MARKETSTACK_API_KEY` | *(empty)* | **yes** | local only | Reserved intraday provider. **Free tier is EOD-only** — intraday needs a paid plan. Not wired to a live path; kept for a future paid upgrade |
 | `ALPHA_VANTAGE_INTRADAY_KEY` | *(empty)* | **yes** | local only | Reserved Alpha-Vantage key for intraday. **Alpha Vantage intraday is a premium endpoint** on the free tier. Not wired to a live path |
 
-**Phase 6.5 intraday note:** the chart's intraday intervals (1m/5m/15m/30m/1H)
+**Intraday note:** the chart's intraday intervals (1m/5m/15m/30m/1H)
 are served by **keyless yfinance** (`app/services/ohlcv.py`, on-demand + 60s
 cached, not persisted). The three keys the owner supplied for intraday
 (`MARKETSTACK_API_KEY`, `ALPHA_VANTAGE_INTRADAY_KEY`, and Finnhub) all gate
@@ -139,7 +139,7 @@ India-only — NSE/BSE-suffixed symbols.
 
 ## Paper trading / research / evaluation
 
-All have safe defaults — no deploy-time action was required for Phase 5.
+All have safe defaults — no deploy-time action is required.
 
 | Variable | Default | Secret | Where set | Purpose |
 |---|---|---|---|---|
@@ -171,5 +171,5 @@ All have safe defaults — no deploy-time action was required for Phase 5.
 | Variable | Status |
 |---|---|
 | `ANTHROPIC_API_KEY` | declared in settings, **not yet wired** — the LLM registry currently builds only gemini/openai/fake; reserved for a future Claude provider |
-| Reddit / Twitter-X / OpenBB APIs | deferred Phase 6 providers. The `providers/` abstraction is ready for them (add a `BaseProvider` subclass, a key, and a `PROVIDER_PRIORITY` entry); they will follow the same pattern (key in Render env, graceful degrade when absent) |
-| `ALPHA_VANTAGE_KEY` (old name) | dead — superseded by `ALPHA_VANTAGE_API_KEY` (the Phase 6 provider). No code reads the old name |
+| Reddit / Twitter-X / OpenBB APIs | deferred providers. The `providers/` abstraction is ready for them (add a `BaseProvider` subclass, a key, and a `PROVIDER_PRIORITY` entry); they will follow the same pattern (key in Render env, graceful degrade when absent) |
+| `ALPHA_VANTAGE_KEY` (old name) | dead — superseded by `ALPHA_VANTAGE_API_KEY` (the current provider). No code reads the old name |

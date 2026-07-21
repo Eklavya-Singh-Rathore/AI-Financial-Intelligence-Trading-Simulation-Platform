@@ -348,10 +348,9 @@ source byte-identical between the backend and the inference Space.
 
 ## License
 
-No open-source license is currently declared for this repository, so all rights
-are reserved by the author. The vendored Kronos model source
-(`backend/app/ml/kronos_src/`) is distributed under its own MIT license — see
-that directory's `LICENSE`.
+Released under the **MIT License** — see [`LICENSE`](LICENSE). The vendored
+Kronos model source (`backend/app/ml/kronos_src/`) is distributed under its own
+MIT license; see that directory's `LICENSE`.
 
 ## Acknowledgements
 

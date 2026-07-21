@@ -1,7 +1,7 @@
 # ADR-0002: Authentication via Supabase Auth + backend JWT verification
 
 - **Status:** Accepted
-- **Date:** 2026 (Phase 4; guest added Phase 4.6)
+- **Date:** 2026
 
 ## Context
 
@@ -33,4 +33,4 @@ the browser) — [ADR is realized in](../architecture/security.md).
 - **−** Remote verification adds a cached network hop when the JWT secret is
   unset. The admin allow-list is hard-coded in a migration (fine for this scope).
 - **−** Open sign-up + no funded LLM fallback means public exposure has cost/abuse
-  surface; mitigated by rate limits and run caps, revisited in Phase 5.
+  surface; mitigated by rate limits and run caps, revisited later.

@@ -1,7 +1,7 @@
 # ADR-0004: Deployment on Vercel + Render + Hugging Face + Supabase
 
 - **Status:** Accepted
-- **Date:** 2026 (Phase 4.5; supersedes the earlier Oracle-VM plan)
+- **Date:** 2026 (supersedes the earlier Oracle-VM plan)
 
 ## Context
 

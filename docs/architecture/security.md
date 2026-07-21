@@ -22,7 +22,7 @@ context — loudly warned at startup.
 `user_id` on `chat_sessions`, `agent_runs`, `backtests`, `forecasts`, `sim_portfolios`/`sim_orders`/`sim_trades`, and
 `watchlists`. The backend stamps the caller's id on write and filters by owner
 on read; cross-user access returns `404`. Verified live with distinct users
-(and with the guest account, which is an ordinary `user`). The Phase 6 admin
+(and with the guest account, which is an ordinary `user`). The admin
 catalog-sync route (`POST /admin/catalog/sync`) is gated on `auth.privileged`
 (`service`/`admin`) — it returns `403` for ordinary users.
 
@@ -51,7 +51,7 @@ account** — no bypass:
   warnings cleared.
 - Least-privilege app DB role (`app_rw`) is a recommended owner action.
 
-## Hardening (Phase 2.5, still in force)
+## Hardening (still in force)
 
 Per-client rate limiting (`RATE_LIMIT_PER_MINUTE`), agent-run concurrency caps +
 per-run timeouts + orphan sweep, CPU work off the event loop, session-rollback
@@ -70,7 +70,7 @@ message (never reveal whether the account exists).
 
 All secrets come from environment variables (`.env` git-ignored; Vercel/Render/
 Space/GitHub env stores). Publishable Supabase anon keys are public by design.
-The Phase 6 provider keys (`FINNHUB_API_KEY`, `ALPHA_VANTAGE_API_KEY`) are
+The provider keys (`FINNHUB_API_KEY`, `ALPHA_VANTAGE_API_KEY`) are
 secrets — only placeholder tokens ship in `.env.example`/`render.yaml`
 (`sync: false`), and every provider degrades to empty when its key is absent, so
 the platform never depends on a committed key. See
@@ -79,7 +79,7 @@ the platform never depends on a committed key. See
 ## Owner actions / known gaps
 
 - Rotate every credential shared during development (DB password, LLM/News keys,
-  Render API key, HF token → fine-grained read; regenerate `API_KEY`). Phase 6:
+  Render API key, HF token → fine-grained read; regenerate `API_KEY`). Also
   set + rotate `FINNHUB_API_KEY` / `ALPHA_VANTAGE_API_KEY` as Render secrets.
 - Enable Supabase leaked-password protection (dashboard setting).
 - Create the least-privilege `app_rw` DB role.

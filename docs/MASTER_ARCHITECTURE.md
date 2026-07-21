@@ -78,7 +78,7 @@ yfinance → `price_bars` (idempotent upserts), daily scheduler refresh, and a
 pandas indicator engine (`sma`, `ema`, `rsi`, `macd`, `bollinger`) computed
 on demand.
 
-### 3.2 Forecasting (Phases 1–4.5, intraday in 6.1)
+### 3.2 Forecasting
 
 `GET /instruments/{s}/forecast?model=kronos|baseline&horizon=1..60&interval=1D`.
 The registry maps `kronos` to in-process torch (`KRONOS_MODE=local`, dev) or the
@@ -86,7 +86,7 @@ HF Space (`remote`, production) — same public name, same persisted
 `model_name`. Failures normalize to `ForecasterError` → HTTP 503; agent runs
 fall back to `baseline`. Forecasts persist per point (`forecasts` table) with
 owner stamping. Kronos is the default forecaster (`DEFAULT_FORECASTER=kronos`)
-and, as of Phase 6, is shown by default on the instrument chart.
+and is shown by default on the instrument chart.
 
 **Intraday forecasting.** The service is interval-aware: it sources
 bars through the `ohlcv` resolver (daily `price_bars`; 1m–1H on-demand yfinance)
@@ -116,7 +116,7 @@ code.
 |---|---|---|---|
 | Kronos-mini | ~4.1M | 2048 | no |
 | **Kronos-small** | **~24.7M** | **512** | **yes — production (remote Space)** |
-| **Kronos-base** | **~102.3M** | **512** | **yes — local dev (in-process, Phase 6.1)** |
+| **Kronos-base** | **~102.3M** | **512** | **yes — local dev (in-process)** |
 
 **Variant selection.** Model choice is a data lookup in
 `app/ml/kronos_variants.py` (`KRONOS_VARIANTS`: mini/small/base — the only
@@ -154,7 +154,7 @@ backtest, news, memory) → technical analyst → news analyst → bull/bear deb
 → portfolio manager. Every step persists an `agent_messages` row with
 structured JSON.
 
-**Phase 5:** the gather-time inputs are persisted on the run
+The gather-time inputs are persisted on the run
 (`agent_runs.context_snapshot`) so `GET /agents/runs/{id}/explanation` can
 compose a faithful, deterministic explanation — why (decision summary, trader
 rationale, risk rationale), stances, sentiment, debate points, risk concerns,
@@ -201,7 +201,7 @@ the quarterly income statement. Endpoints:
 `GET /instruments/{s}/profile | /financials | /earnings`; UI: the Research
 section on the instrument page.
 
-### 3.7 News RAG & grounded chat (Phases 3 + 5)
+### 3.7 News RAG & grounded chat
 
 Chat (`/chat/*`) grounds each answer deterministically: detected symbols →
 live market stats; recent agent decisions; semantic memory
@@ -285,10 +285,10 @@ enforces ownership in application code.
 | Group | Tables |
 |---|---|
 | Market data (adopted) | `instruments` (curated Nifty-100 + on-demand, + `sector_id`/`industry_id`), `price_bars`, `data_providers`, `instrument_provider_mappings`, `exchanges`, warehouse tables |
-| AI core (owned) | `forecasts` (+`interval`/`target_ts`, Phase 6.1), `backtests`, `agent_runs` (+`context_snapshot`), `agent_messages`, `chat_sessions`, `chat_messages`, `agent_embeddings` (vector 384) |
-| Paper trading (owned, Phase 5) | `sim_portfolios`, `sim_orders`, `sim_trades`, `sim_positions` |
-| Research (owned, Phase 5) | `instrument_fundamentals` (JSONB cache), `research_documents` (news corpus, vector 384) |
-| Market expansion (owned, Phase 6) | `watchlists`, `watchlist_items` (`0014`), `ingest_jobs` durable queue (`0015`) |
+| AI core (owned) | `forecasts` (+`interval`/`target_ts`), `backtests`, `agent_runs` (+`context_snapshot`), `agent_messages`, `chat_sessions`, `chat_messages`, `agent_embeddings` (vector 384) |
+| Paper trading (owned) | `sim_portfolios`, `sim_orders`, `sim_trades`, `sim_positions` |
+| Research (owned) | `instrument_fundamentals` (JSONB cache), `research_documents` (news corpus, vector 384) |
+| Market expansion (owned) | `watchlists`, `watchlist_items` (`0014`), `ingest_jobs` durable queue (`0015`) |
 
 Migration chain: `0004_warehouse` → … → **`0011_simulation`** →
 **`0012_research`** → **`0013_run_context`** → **`0014_watchlists`** →
@@ -331,7 +331,7 @@ opportunistically via `BackgroundTasks` on each `POST /market/track`.
 Next.js 15 App Router + TypeScript, Tailwind v4, TanStack Query,
 lightweight-charts v5. All backend access goes through the authenticated
 same-origin proxy `app/api/backend/[...path]` (attaches the Supabase JWT
-server-side; forwards `204/304` with a null body). **Phase 6 redesign**: a
+server-side; forwards `204/304` with a null body). **Redesign**: a
 CSS-var design-token system + hand-built `components/ui/*` primitives (Card,
 Stat, Table, Badge, Button, Input, Sheet, EmptyState, Skeleton…), a responsive
 shell with a mobile drawer, a persisted-instance `TradingChart`, a Cmd/Ctrl-K
@@ -346,15 +346,15 @@ Chat (**news citations**), Login (+ guest).
 ## 8. Configuration
 
 `.env`-driven pydantic settings; full reference in
-[environment.md](environment.md). Phase 5 additions: `SIM_STARTING_CASH`,
+[environment.md](environment.md). Simulation settings: `SIM_STARTING_CASH`,
 `FUNDAMENTALS_TTL_HOURS`, `ENABLE_NEWS_INGEST`, `NEWS_RAG_TOP_K`,
 `NEWS_RETENTION_DAYS`, `LLM_COST_INPUT_PER_1M`, `LLM_COST_OUTPUT_PER_1M`.
-Phase 6 additions: `FINNHUB_API_KEY`, `ALPHA_VANTAGE_API_KEY` (secrets),
+Provider settings: `FINNHUB_API_KEY`, `ALPHA_VANTAGE_API_KEY` (secrets),
 `ALPHA_VANTAGE_DAILY_CAP`, `PROVIDER_PRIORITY`, `MAX_TRACKED_INSTRUMENTS`,
 `NEWS_INGEST_DAILY_CAP`, `INGEST_PAUSE_SECONDS`. All have safe defaults (the
 providers degrade to keyless yfinance), so no deploy-time action is required
 beyond setting the two provider secrets if those integrations are wanted.
-Phase 6.1: `KRONOS_VARIANT` (empty = auto: base for dev, small for prod) and
+`KRONOS_VARIANT` (empty = auto: base for dev, small for prod) and
 `GEMINI_MODEL` now defaults to the stable `gemini-flash-latest` alias (pinned
 Gemini versions get retired for new API keys and then 404).
 
@@ -386,10 +386,10 @@ Gemini versions get retired for new API keys and then 404).
 
 Real trading/order execution; notifications (permanently out of scope);
 intraday data; multi-tenant RLS policies (data access is backend-mediated with
-ownership in app code); document uploads for RAG (news-only corpus this phase,
+ownership in app code); document uploads for RAG (currently a news-only corpus,
 by owner decision).
 
-**Deferred (Phase 6, ready for a later phase):** streaming assistant responses
+**Deferred (ready for later):** streaming assistant responses
 (needs backend SSE + proxy passthrough); Reddit / Twitter-X sentiment and
 OpenBB providers (the `providers/` abstraction is ready for them); correlated
 (covariance-based) Monte-Carlo (current model is per-asset GBM); the official

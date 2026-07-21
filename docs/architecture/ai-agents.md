@@ -33,7 +33,7 @@ gather_context (deterministic: prices, indicators, news, Kronos forecast, backte
 6. **Portfolio Manager** — final decision + rationale.
 
 Every step is persisted to `agent_messages`; the final decision to
-`agent_runs`. **Phase 5:** the gather-time inputs (price summary, indicators,
+`agent_runs`. The gather-time inputs (price summary, indicators,
 forecast, backtest, headlines) are also persisted on the run as
 `context_snapshot`, so `GET /agents/runs/{id}/explanation` composes a
 faithful, deterministic explanation of the recommendation (no LLM call);

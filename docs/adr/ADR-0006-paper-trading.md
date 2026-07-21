@@ -5,7 +5,7 @@
 
 ## Context
 
-Phase 5 adds a paper-trading simulator so users can act on AI recommendations
+The platform includes a paper-trading simulator so users can act on AI recommendations
 without real money. The platform's market data is **daily OHLCV bars** (no
 intraday feed), the backend runs on a 512 MB free tier, and a hard product
 rule applies: **the AI must never execute a trade by itself**.
