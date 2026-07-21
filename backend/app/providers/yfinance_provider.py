@@ -7,10 +7,13 @@ empty on any failure.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import httpx
 import structlog
 
-from app.providers.base import BaseProvider, Capability, Quote, SymbolMatch
+from app.core.config import get_settings
+from app.providers.base import BaseProvider, Capability, NewsItem, Quote, SymbolMatch
 
 log = structlog.get_logger(__name__)
 
@@ -21,10 +24,53 @@ _INDIA_EXCHANGES = {"NSI": "NSE", "BSE": "BSE"}
 
 class YFinanceProvider(BaseProvider):
     code = "yfinance"
-    capabilities: frozenset[Capability] = frozenset({"symbol_search", "quotes"})
+    capabilities: frozenset[Capability] = frozenset({"symbol_search", "quotes", "news"})
 
     def available(self) -> bool:
         return True  # keyless
+
+    def fetch_news(
+        self, query: str, *, symbol: str | None = None, limit: int | None = None
+    ) -> list[NewsItem]:
+        """Yahoo Finance news via the keyless search endpoint's ``news`` array
+        (free-text query = display name). No summaries are provided by Yahoo."""
+        q = (query or symbol or "").strip().strip('"')
+        if not q:
+            return []
+        cap = limit or get_settings().news_max_headlines
+        try:
+            resp = httpx.get(
+                _YAHOO_SEARCH,
+                params={"q": q, "quotesCount": 0, "newsCount": min(cap, 20)},
+                headers={"User-Agent": "Mozilla/5.0 (compatible; ai-fin-platform/0.1)"},
+                timeout=15.0,
+            )
+            if resp.status_code != 200:
+                log.warning("yf_news_http", status=resp.status_code)
+                return []
+            news = resp.json().get("news") or []
+        except Exception as exc:  # noqa: BLE001 - news is best-effort
+            log.warning("yf_news_failed", error=str(exc)[:200])
+            return []
+
+        out: list[NewsItem] = []
+        for n in news[:cap]:
+            title = (n.get("title") or "").strip()
+            if not title:
+                continue
+            ts = n.get("providerPublishTime")
+            published = datetime.fromtimestamp(ts, tz=UTC).isoformat() if ts else ""
+            out.append(
+                NewsItem(
+                    title=title,
+                    source=n.get("publisher") or "Yahoo Finance",
+                    published_at=published,
+                    description="",
+                    url=n.get("link") or "",
+                    source_provider=self.code,
+                )
+            )
+        return out
 
     def search_symbols(self, query: str, *, limit: int = 10) -> list[SymbolMatch]:
         query = query.strip()

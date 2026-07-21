@@ -35,12 +35,12 @@ from app.llm.registry import get_llm_client
 from app.ml.base import ForecasterError
 from app.models.agent_run import AgentMessage, AgentRun
 from app.models.instrument import Instrument
+from app.providers import registry as provider_registry
 from app.services import (
     backtest_service,
     embeddings,
     forecast_service,
     market_data,
-    news,
     news_rag,
 )
 from app.services.backtest_service import BacktesterError
@@ -52,6 +52,7 @@ log = structlog.get_logger(__name__)
 # --------------------------------------------------------------------------- #
 # Context gathering (deterministic, no LLM)
 # --------------------------------------------------------------------------- #
+
 
 def _price_summary(df) -> dict:
     close = df["close"]
@@ -79,18 +80,14 @@ def _price_summary(df) -> dict:
 def _latest_indicators(df) -> dict:
     values = compute_indicators(df, ["sma", "ema", "rsi", "macd", "bollinger"])
     last = values.iloc[-1]
-    return {
-        k: (None if last.isna()[k] else round(float(last[k]), 3)) for k in values.columns
-    }
+    return {k: (None if last.isna()[k] else round(float(last[k]), 3)) for k in values.columns}
 
 
 async def gather_context(session: AsyncSession, instrument: Instrument) -> RunContext:
     settings = get_settings()
     df = await market_data.price_bars_dataframe(session, instrument.id)
     if df.empty:
-        raise ValueError(
-            f"no price history for '{instrument.symbol}' - run POST /ingest/run first"
-        )
+        raise ValueError(f"no price history for '{instrument.symbol}' - run POST /ingest/run first")
 
     ctx = RunContext(
         symbol=instrument.symbol,
@@ -136,10 +133,15 @@ async def gather_context(session: AsyncSession, instrument: Instrument) -> RunCo
         except BacktesterError:
             ctx.backtest = {"engine": "none", "error": str(exc)[:200]}
 
-    # News headlines (best effort); persist them into the RAG corpus so chat
-    # citations grow organically with every run (Phase 5, never raises).
+    # Consolidated multi-provider news (best effort): NewsAPI + Yahoo by name,
+    # Finnhub + Alpha Vantage by ticker, merged and ranked by relevance/recency.
+    # Persisted into the RAG corpus so chat citations grow with every run.
+    yprovider = await market_data.get_yfinance_provider(session)
+    provider_symbol = await market_data.get_provider_symbol(session, instrument.id, yprovider.id)
     headlines = await asyncio.to_thread(
-        news.fetch_headlines, f'"{instrument.display_name}"'
+        provider_registry.fetch_news,
+        f'"{instrument.display_name}"',
+        symbol=provider_symbol,
     )
     ctx.headlines = [h.as_prompt_line() for h in headlines]
     await news_rag.ingest_headlines(session, instrument.symbol, headlines)
@@ -162,6 +164,7 @@ async def _recall_notes(session: AsyncSession, symbol: str, top_k: int) -> list[
 # --------------------------------------------------------------------------- #
 # Pipeline execution
 # --------------------------------------------------------------------------- #
+
 
 async def _step(
     session: AsyncSession,
@@ -273,13 +276,9 @@ async def execute_run(session: AsyncSession, run_id: uuid.UUID) -> None:
     the failure path rolls the session back before recording the failure so a
     mid-transaction DB error cannot strand the run in ``running``.
     """
-    run = (
-        await session.execute(select(AgentRun).where(AgentRun.id == run_id))
-    ).scalar_one()
+    run = (await session.execute(select(AgentRun).where(AgentRun.id == run_id))).scalar_one()
     instrument = (
-        await session.execute(
-            select(Instrument).where(Instrument.id == run.instrument_id)
-        )
+        await session.execute(select(Instrument).where(Instrument.id == run.instrument_id))
     ).scalar_one()
 
     run.status = "running"
@@ -295,9 +294,7 @@ async def execute_run(session: AsyncSession, run_id: uuid.UUID) -> None:
         )
         metrics.record_run_result("completed", usage_total, time.monotonic() - started)
     except TimeoutError:
-        await _record_failure(
-            session, run, usage_total, f"run timed out after {int(timeout)}s"
-        )
+        await _record_failure(session, run, usage_total, f"run timed out after {int(timeout)}s")
         metrics.record_run_result("failed", usage_total, time.monotonic() - started)
     except Exception as exc:  # noqa: BLE001 - run must record its own failure
         await _record_failure(session, run, usage_total, str(exc)[:2000])

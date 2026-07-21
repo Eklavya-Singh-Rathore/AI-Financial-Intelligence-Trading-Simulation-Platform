@@ -8,12 +8,94 @@ reserved in the priority string for a future remote deployment.
 
 from __future__ import annotations
 
+import re
+from datetime import UTC, datetime
+
 import structlog
 
 from app.core.config import get_settings
 from app.providers.base import BaseProvider, Capability, NewsItem, SymbolMatch
 
 log = structlog.get_logger(__name__)
+
+
+def _norm_title(title: str) -> str:
+    """Lowercased, alphanumeric-only, whitespace-collapsed title (dedup key)."""
+    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9\s]", "", (title or "").lower())).strip()
+
+
+def _tokens(text: str) -> set[str]:
+    return {w for w in _norm_title(text).split() if len(w) > 2}
+
+
+def _age_days(published_at: str, now: datetime) -> float | None:
+    if not published_at:
+        return None
+    try:
+        dt = datetime.fromisoformat(published_at.replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return max(0.0, (now - dt).total_seconds() / 86400.0)
+
+
+def rank_and_merge_news(
+    items: list[NewsItem],
+    *,
+    query: str = "",
+    symbol: str | None = None,
+    limit: int | None = None,
+    lookback_days: int = 7,
+    now: datetime | None = None,
+) -> list[NewsItem]:
+    """Merge overlapping stories and rank by relevance + recency (pure).
+
+    Stories are grouped by normalized title (so the same headline from several
+    providers collapses to one), keeping the richest copy and recording every
+    contributing API in ``source_provider`` (e.g. "newsapi+finnhub"); the
+    publisher (``source``) attribution is preserved untouched. Ranking favors
+    query/symbol token overlap, then recency within the look-back window.
+    """
+    now = now or datetime.now(UTC)
+    q_tokens = _tokens(query)
+    if symbol:
+        q_tokens.add(symbol.strip().lower())
+
+    best: dict[str, NewsItem] = {}
+    provs: dict[str, list[str]] = {}
+    for it in items:
+        key = _norm_title(it.title)
+        if not key:
+            continue
+        cur = best.get(key)
+        if cur is None or len(it.description) > len(cur.description):
+            best[key] = it
+        contributors = provs.setdefault(key, [])
+        if it.source_provider and it.source_provider not in contributors:
+            contributors.append(it.source_provider)
+
+    def score(it: NewsItem) -> tuple[float, str]:
+        toks = _tokens(f"{it.title} {it.description}")
+        relevance = len(q_tokens & toks) / len(q_tokens) if q_tokens else 0.0
+        age = _age_days(it.published_at, now)
+        recency = max(0.0, 1.0 - age / lookback_days) if age is not None else 0.0
+        return (relevance * 2.0 + recency, it.published_at)
+
+    merged = [
+        NewsItem(
+            title=it.title,
+            source=it.source,
+            published_at=it.published_at,
+            description=it.description,
+            url=it.url,
+            source_provider="+".join(provs.get(key, [])) or it.source_provider,
+        )
+        for key, it in best.items()
+    ]
+    merged.sort(key=score, reverse=True)
+    return merged[:limit] if limit else merged
+
 
 _PROVIDERS: dict[str, BaseProvider] | None = None
 
@@ -73,18 +155,23 @@ def search_symbols(query: str, *, limit: int = 10) -> list[SymbolMatch]:
 def fetch_news(
     query: str, *, symbol: str | None = None, limit: int | None = None
 ) -> list[NewsItem]:
-    """Merge news across all available news providers, deduped by title|url.
+    """Consolidated news across every available news provider.
 
-    ``query`` is free text (NewsAPI); ``symbol`` is the provider ticker for
-    symbol-keyed sources (Finnhub).
+    ``query`` is free text (NewsAPI/Yahoo); ``symbol`` is the provider ticker
+    for symbol-keyed sources (Finnhub/Alpha Vantage). Each provider is fetched
+    best-effort, then overlapping stories are merged and ranked by relevance +
+    recency (see ``rank_and_merge_news``).
     """
-    seen: set[str] = set()
-    merged: list[NewsItem] = []
+    collected: list[NewsItem] = []
     for provider in providers_for("news"):
-        for item in provider.fetch_news(query, symbol=symbol, limit=limit):
-            key = f"{item.title.strip().lower()}|{item.url}"
-            if key in seen:
-                continue
-            seen.add(key)
-            merged.append(item)
-    return merged
+        try:
+            collected.extend(provider.fetch_news(query, symbol=symbol, limit=limit))
+        except Exception as exc:  # noqa: BLE001 - one provider must not sink the rest
+            log.warning("news_provider_failed", provider=provider.code, error=str(exc)[:200])
+    return rank_and_merge_news(
+        collected,
+        query=query,
+        symbol=symbol,
+        limit=limit,
+        lookback_days=get_settings().news_lookback_days,
+    )

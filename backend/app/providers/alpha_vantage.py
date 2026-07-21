@@ -15,11 +15,22 @@ import httpx
 import structlog
 
 from app.core.config import get_settings
-from app.providers.base import BaseProvider, Capability, FundamentalsBundle, Quote
+from app.providers.base import BaseProvider, Capability, FundamentalsBundle, NewsItem, Quote
 
 log = structlog.get_logger(__name__)
 
 _BASE = "https://www.alphavantage.co/query"
+
+
+def _av_time(raw: str | None) -> str:
+    """AV ``time_published`` ("YYYYMMDDTHHMMSS") -> ISO; "" on any failure."""
+    if not raw:
+        return ""
+    try:
+        return datetime.strptime(raw, "%Y%m%dT%H%M%S").replace(tzinfo=UTC).isoformat()
+    except (ValueError, TypeError):
+        return ""
+
 
 _lock = threading.Lock()
 _day: str | None = None
@@ -42,10 +53,41 @@ def _reserve_call() -> bool:
 
 class AlphaVantageProvider(BaseProvider):
     code = "alpha_vantage"
-    capabilities: frozenset[Capability] = frozenset({"fundamentals", "quotes"})
+    capabilities: frozenset[Capability] = frozenset({"fundamentals", "quotes", "news"})
 
     def available(self) -> bool:
         return bool(get_settings().alpha_vantage_api_key)
+
+    def fetch_news(
+        self, query: str, *, symbol: str | None = None, limit: int | None = None
+    ) -> list[NewsItem]:
+        """AV NEWS_SENTIMENT is ticker-keyed (no free-text name search), so it
+        contributes only when a provider ticker is supplied. Shares the hard
+        daily cap with fundamentals/quotes, so it degrades to [] once exhausted."""
+        sym = (symbol or "").strip()
+        if not sym:
+            return []
+        cap = limit or get_settings().news_max_headlines
+        data = self._get(
+            {"function": "NEWS_SENTIMENT", "tickers": sym, "sort": "LATEST", "limit": min(cap, 50)}
+        )
+        feed = (data or {}).get("feed") or []
+        out: list[NewsItem] = []
+        for a in feed[:cap]:
+            title = (a.get("title") or "").strip()
+            if not title:
+                continue
+            out.append(
+                NewsItem(
+                    title=title,
+                    source=a.get("source") or "Alpha Vantage",
+                    published_at=_av_time(a.get("time_published")),
+                    description=(a.get("summary") or "").strip()[:300],
+                    url=a.get("url") or "",
+                    source_provider=self.code,
+                )
+            )
+        return out
 
     def _get(self, params: dict) -> dict | None:
         if not _reserve_call():
@@ -69,9 +111,7 @@ class AlphaVantageProvider(BaseProvider):
         data = self._get({"function": "OVERVIEW", "symbol": provider_symbol})
         if not data or not data.get("Symbol"):
             return None
-        return FundamentalsBundle(
-            data=data, as_of=datetime.now(UTC).isoformat(), source=self.code
-        )
+        return FundamentalsBundle(data=data, as_of=datetime.now(UTC).isoformat(), source=self.code)
 
     def get_quote(self, provider_symbol: str) -> Quote | None:
         data = self._get({"function": "GLOBAL_QUOTE", "symbol": provider_symbol})

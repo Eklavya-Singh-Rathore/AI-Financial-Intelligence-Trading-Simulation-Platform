@@ -5,9 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-Capability = Literal[
-    "quotes", "fundamentals", "news", "sentiment", "symbol_search", "ohlcv"
-]
+Capability = Literal["quotes", "fundamentals", "news", "sentiment", "symbol_search", "ohlcv"]
 
 
 @dataclass
@@ -51,6 +49,12 @@ class NewsItem:
     description: str = ""
     url: str = ""
     source_provider: str = ""
+
+    def as_prompt_line(self) -> str:
+        """Compact line for the agent prompt (mirrors news.Headline)."""
+        date = self.published_at[:10]
+        desc = f" - {self.description}" if self.description else ""
+        return f"[{date}] ({self.source}) {self.title}{desc}"
 
 
 @dataclass
