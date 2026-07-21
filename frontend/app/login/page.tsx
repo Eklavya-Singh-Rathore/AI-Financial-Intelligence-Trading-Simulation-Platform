@@ -24,6 +24,16 @@ import { authConfigured, supabaseBrowser } from "@/lib/supabase";
 const REPO_URL =
   "https://github.com/Eklavya-Singh-Rathore/AI-Financial-Intelligence-Trading-Simulation-Platform";
 
+// Phase 7: drop any stored floating-chat session on an auth transition so the
+// dock never resumes a previous (or another user's) conversation.
+function clearAssistantSession() {
+  try {
+    localStorage.removeItem("assistant_session_id");
+  } catch {
+    /* localStorage unavailable — nothing to clear */
+  }
+}
+
 const TONE_CHIP: Record<string, string> = {
   accent: "bg-accent/10 text-accent",
   gain: "bg-gain/10 text-gain",
@@ -104,6 +114,7 @@ export default function LandingPage() {
         const body = await res.json().catch(() => ({}));
         throw new Error(body?.error ?? "guest sign-in failed");
       }
+      clearAssistantSession();
       router.push("/");
       router.refresh();
     } catch (err) {
@@ -131,6 +142,7 @@ export default function LandingPage() {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
       }
+      clearAssistantSession();
       router.push("/");
       router.refresh();
     } catch (err) {

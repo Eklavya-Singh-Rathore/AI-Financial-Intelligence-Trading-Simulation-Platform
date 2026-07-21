@@ -19,6 +19,7 @@ from app.api.routers import (
     backtest,
     chat,
     evaluation,
+    guest,
     health,
     ingest,
     instruments,
@@ -100,6 +101,7 @@ _PROTECTED = [
     watchlists.router,
     admin.router,
     market.router,
+    guest.router,
 ]
 _auth = [Depends(get_auth)]
 for router in _PROTECTED:

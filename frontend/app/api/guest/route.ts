@@ -38,13 +38,27 @@ export async function POST() {
       },
     },
   );
-  const { error } = await supabase.auth.signInWithPassword({
+  const { data, error } = await supabase.auth.signInWithPassword({
     email: process.env.GUEST_EMAIL!,
     password: process.env.GUEST_PASSWORD!,
   });
   if (error) {
     // Generic message: never leak whether the account exists or why it failed.
     return NextResponse.json({ error: "guest sign-in failed" }, { status: 401 });
+  }
+  // Phase 7: wipe the shared guest workspace so each session starts clean.
+  // Blocks so the dashboard loads clean; non-fatal if the backend can't be reached.
+  const token = data.session?.access_token;
+  const backend = process.env.BACKEND_URL?.replace(/\/$/, "");
+  if (token && backend) {
+    try {
+      await fetch(`${backend}/guest/reset`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch {
+      /* ignore — the guest is already signed in */
+    }
   }
   return NextResponse.json({ ok: true });
 }

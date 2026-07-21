@@ -124,6 +124,12 @@ function AccountMenu({ menuSide = "bottom" }: { menuSide?: "top" | "bottom" }) {
   if (!authConfigured() || !email) return null;
   const signOut = async () => {
     await supabaseBrowser().auth.signOut();
+    // Phase 7: drop the floating-chat session so the next user starts fresh.
+    try {
+      localStorage.removeItem("assistant_session_id");
+    } catch {
+      /* localStorage unavailable — nothing to clear */
+    }
     router.push("/login");
     router.refresh();
   };
