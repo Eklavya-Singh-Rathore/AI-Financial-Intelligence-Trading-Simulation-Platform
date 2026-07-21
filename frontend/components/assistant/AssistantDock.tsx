@@ -84,7 +84,9 @@ export function AssistantDock() {
     send.mutate(content);
   };
 
-  if (pathname.startsWith("/login")) return null;
+  // Hidden on the auth/landing page and on the dedicated Chat page (which is the
+  // full chat surface — a floating mini-chat there would be redundant/confusing).
+  if (pathname.startsWith("/login") || pathname.startsWith("/chat")) return null;
   const empty = !!sessionId && (messages.data?.length ?? 0) === 0 && !send.isPending;
 
   return (

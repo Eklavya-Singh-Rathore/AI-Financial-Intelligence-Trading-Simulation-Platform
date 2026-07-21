@@ -1,16 +1,14 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import Link from "next/link";
-import { Bot } from "lucide-react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Bot, Info } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
 import { TradingChart } from "@/components/chart/TradingChart";
 import { ResearchSection } from "@/components/ResearchSection";
-import { OrderTicket } from "@/components/sim/OrderTicket";
 import { WatchlistStar } from "@/components/WatchlistStar";
-import { Badge, Button, Card, CardBody, CardHeader, CardTitle } from "@/components/ui";
+import { Button, Tooltip } from "@/components/ui";
 import { api, fmtNum, fmtPct, polarity } from "@/lib/api";
 import { DEFAULT_INTERVAL, isIntradayInterval } from "@/lib/chartIntervals.mjs";
 import { INDICATOR_IDS, backendNames } from "@/lib/indicators";
@@ -26,11 +24,26 @@ const METRIC_LABELS: Record<string, string> = {
   num_fills: "Fills",
 };
 
+const WINDOW_TIPS = {
+  fast: "The shorter moving-average length in bars — reacts quickly to price. Smaller = more sensitive with more signals. Typical: 5–20 (e.g. 10).",
+  slow: "The longer moving-average length in bars — the trend baseline. Larger = smoother with fewer signals. Typical: 20–50 (e.g. 30); it must be greater than the fast window.",
+} as const;
+
+/** Small info icon with an explanatory tooltip (Phase 7). */
+function InfoTip({ text }: { text: string }) {
+  return (
+    <Tooltip content={text} className="max-w-xs whitespace-normal text-left font-normal text-ink-2">
+      <span className="cursor-help text-ink-3 transition-colors hover:text-ink">
+        <Info size={13} />
+      </span>
+    </Tooltip>
+  );
+}
+
 export default function InstrumentPage() {
   const { symbol: raw } = useParams<{ symbol: string }>();
   const symbol = decodeURIComponent(raw);
   const router = useRouter();
-  const qc = useQueryClient();
   // Phase 6: Kronos is the default forecaster and shows on load (users can
   // still switch to baseline or hide it). First call per idle symbol rides the
   // Space wake-up, covered by the proxy maxDuration + keepalive.
@@ -99,12 +112,6 @@ export default function InstrumentPage() {
 
   const rsiLast = indicators.data?.points.at(-1)?.values["rsi_14"];
   const watchlists = useQuery({ queryKey: ["watchlists"], queryFn: api.watchlists });
-  const portfolio = useQuery({ queryKey: ["sim", "portfolio"], queryFn: api.simPortfolio });
-  const runs = useQuery({ queryKey: ["runs"], queryFn: api.runs, staleTime: 30_000 });
-  const latestRun = (runs.data ?? []).find((r) => r.symbol === symbol && r.status === "completed");
-  const aiDecision = latestRun?.final_decision as
-    | { action?: string; size_pct?: number; confidence?: number; summary?: string }
-    | undefined;
   const srLevels = useMemo(() => {
     if (!showSR) return [];
     return supportResistance(prices.data?.bars ?? [], { window: 5, max: 3 }).map((l) => ({
@@ -187,65 +194,18 @@ export default function InstrumentPage() {
         />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Trade {symbol}</CardTitle>
-            <span className="text-[11px] text-ink-3">paper · market/limit/stop/stop-limit</span>
-          </CardHeader>
-          <CardBody>
-            <OrderTicket
-              buyingPower={portfolio.data?.buying_power}
-              defaultSymbol={symbol}
-              onDone={() => qc.invalidateQueries({ queryKey: ["sim"] })}
-            />
-          </CardBody>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>AI view</CardTitle>
-            {latestRun && (
-              <Link href={`/agents/${latestRun.id}`} className="text-xs text-accent hover:underline">
-                latest run →
-              </Link>
-            )}
-          </CardHeader>
-          <CardBody>
-            {aiDecision?.action ? (
-              <div className="space-y-2 text-sm">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge
-                    tone={aiDecision.action === "BUY" ? "gain" : aiDecision.action === "SELL" ? "loss" : "neutral"}
-                  >
-                    {aiDecision.action}
-                    {aiDecision.action !== "HOLD" && aiDecision.size_pct ? ` ${aiDecision.size_pct}%` : ""}
-                  </Badge>
-                  {aiDecision.confidence != null && (
-                    <span className="text-xs text-ink-3">confidence {Math.round(aiDecision.confidence * 100)}%</span>
-                  )}
-                </div>
-                {aiDecision.summary && <p className="leading-relaxed text-ink-2">{aiDecision.summary}</p>}
-                <p className="text-[11px] text-ink-3">
-                  Toggle the support/resistance overlay above; the multi-agent decision is a
-                  recommendation, not auto-executed.
-                </p>
-              </div>
-            ) : (
-              <p className="text-sm text-ink-3">
-                No completed agent run for {symbol} yet — use “Analyze with agents” above to generate a
-                recommendation.
-              </p>
-            )}
-          </CardBody>
-        </Card>
-      </div>
-
       <div className="rounded-lg border border-line p-4">
-        <h2 className="mb-3 font-medium">SMA-crossover backtest</h2>
+        <h2 className="mb-3 flex items-center gap-1.5 font-medium">
+          SMA-crossover backtest
+          <InfoTip text="Simulates a strategy that buys when a fast moving average crosses above a slower one and sells when it crosses below, then measures how that rule would have performed on this instrument's history. Results are hypothetical, not a prediction." />
+        </h2>
         <div className="mb-3 flex flex-wrap items-end gap-3 text-sm">
           {(["fast", "slow"] as const).map((k) => (
             <label key={k} className="flex flex-col gap-1 text-xs text-ink-2">
-              {k} window
+              <span className="flex items-center gap-1">
+                {k} window
+                <InfoTip text={WINDOW_TIPS[k]} />
+              </span>
               <input
                 type="number"
                 value={btParams[k]}

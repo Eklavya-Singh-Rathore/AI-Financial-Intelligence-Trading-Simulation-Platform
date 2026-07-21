@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Banknote, Coins, TrendingUp, Wallet } from "lucide-react";
+import { Banknote, Coins, Info, TrendingUp, Wallet } from "lucide-react";
 import { useState } from "react";
 import Link from "next/link";
 import { AllocationBars } from "@/components/sim/AllocationBars";
@@ -11,9 +11,26 @@ import { IntelligencePanel } from "@/components/sim/IntelligencePanel";
 import { MetricTiles } from "@/components/sim/MetricTiles";
 import { FrontierChart } from "@/components/portfolio/FrontierChart";
 import { MonteCarloChart } from "@/components/portfolio/MonteCarloChart";
-import { Card, CardBody, CardHeader, CardTitle, EmptyState, SkeletonRows, Stat } from "@/components/ui";
+import { Card, CardBody, CardHeader, CardTitle, EmptyState, SkeletonRows, Stat, Tooltip } from "@/components/ui";
 import { api, fmtNum, fmtPct } from "@/lib/api";
 import { cn } from "@/lib/ui";
+
+const TIPS = {
+  var: "Value at Risk estimates the most your portfolio could lose over the chosen horizon at a given confidence — e.g. a 95% 1-day VaR of ₹X means daily losses should exceed ₹X only about 5% of the time. CVaR (below) is the average loss in that worst tail. Computed from historical and parametric (Gaussian) methods.",
+  montecarlo: "Projects thousands of possible future portfolio paths (geometric Brownian motion) from your holdings' historical return and volatility, then shows the range of 12-month outcomes: the median, the 5th–95th percentile band, and the probability of ending below today's value.",
+  optimizer: "Mean-variance optimization searches long-only weightings to find the mix with the best risk-adjusted return (max Sharpe) and the lowest-volatility mix, sampling the efficient frontier. The deltas show how to shift from your current allocation — a suggestion, not auto-applied.",
+} as const;
+
+/** Small info icon with an explanatory tooltip (Phase 7). */
+function InfoTip({ text }: { text: string }) {
+  return (
+    <Tooltip content={text} className="max-w-xs whitespace-normal text-left font-normal text-ink-2">
+      <span className="cursor-help text-ink-3 transition-colors hover:text-ink">
+        <Info size={13} />
+      </span>
+    </Tooltip>
+  );
+}
 
 const HORIZONS = [
   { label: "1D", value: 1 },
@@ -107,6 +124,11 @@ export default function PortfolioPage() {
             <div className="grid gap-5 lg:grid-cols-3">
               <div className="space-y-5 lg:col-span-2">
                 <Card>
+                  <CardHeader><CardTitle>Holdings</CardTitle></CardHeader>
+                  <CardBody><HoldingsTable positions={p.positions} /></CardBody>
+                </Card>
+
+                <Card>
                   <CardHeader><CardTitle>Performance</CardTitle></CardHeader>
                   <CardBody>
                     {performance.data ? (
@@ -122,14 +144,13 @@ export default function PortfolioPage() {
                   </CardBody>
                 </Card>
 
-                <Card>
-                  <CardHeader><CardTitle>Holdings</CardTitle></CardHeader>
-                  <CardBody><HoldingsTable positions={p.positions} /></CardBody>
-                </Card>
-
                 {/* Monte Carlo projection */}
                 <Card>
-                  <CardHeader><CardTitle>12-month projection (Monte Carlo)</CardTitle></CardHeader>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-1.5">
+                      12-month projection (Monte Carlo) <InfoTip text={TIPS.montecarlo} />
+                    </CardTitle>
+                  </CardHeader>
                   <CardBody>
                     {mcData ? (
                       <>
@@ -152,7 +173,11 @@ export default function PortfolioPage() {
 
                 {/* Optimization */}
                 <Card>
-                  <CardHeader><CardTitle>Allocation optimizer</CardTitle></CardHeader>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-1.5">
+                      Allocation optimizer <InfoTip text={TIPS.optimizer} />
+                    </CardTitle>
+                  </CardHeader>
                   <CardBody>
                     {optData ? (
                       <div className="grid gap-4 sm:grid-cols-2">
@@ -199,7 +224,9 @@ export default function PortfolioPage() {
                 {/* Value at Risk */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Value at Risk</CardTitle>
+                    <CardTitle className="flex items-center gap-1.5">
+                      Value at Risk <InfoTip text={TIPS.var} />
+                    </CardTitle>
                     <div className="flex gap-1">
                       {HORIZONS.map((hz) => (
                         <button
