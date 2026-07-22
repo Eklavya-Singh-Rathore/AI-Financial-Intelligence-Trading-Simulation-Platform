@@ -232,7 +232,10 @@ export type CompanyProfile = {
 
 export type FinancialStatement = {
   symbol: string; period: string; statement: string;
-  data: { periods: string[]; rows: Record<string, (number | null)[]> };
+  // periods/rows can be absent in degraded payloads (db-only / provider
+  // fallbacks, pre-normalization caches) — consumers must treat missing as
+  // empty, never assume presence.
+  data: { periods?: string[]; rows?: Record<string, (number | null)[]> };
   fetched_at: string | null; source: string;
 };
 

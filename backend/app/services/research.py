@@ -104,6 +104,25 @@ def serialize_statement(df: pd.DataFrame | None, keep_rows: tuple[str, ...]) -> 
     return {"periods": periods, "rows": rows}
 
 
+def canonical_statement(value: object) -> dict:
+    """Coerce any stored/fallback statement into the canonical
+    ``{"periods": [...], "rows": {...}}`` shape.
+
+    Cached rows written by older code paths and the Alpha-Vantage / db-only
+    fallbacks can hold ``{}`` or ``None``, but every consumer — the financials
+    endpoint, the earnings deriver, the frontend statement table — relies on
+    both keys existing, so normalize at this single choke point.
+    """
+    if not isinstance(value, dict):
+        return {"periods": [], "rows": {}}
+    periods = value.get("periods")
+    rows = value.get("rows")
+    return {
+        "periods": periods if isinstance(periods, list) else [],
+        "rows": rows if isinstance(rows, dict) else {},
+    }
+
+
 def _fetch_from_yfinance(provider_symbol: str) -> dict[str, Any]:
     """Blocking yfinance fetch (call via asyncio.to_thread)."""
     import yfinance as yf
@@ -176,18 +195,16 @@ async def get_fundamentals(
 
     ttl = timedelta(hours=get_settings().fundamentals_ttl_hours)
     fresh = (
-        row is not None
-        and row.fetched_at is not None
-        and datetime.now(UTC) - row.fetched_at < ttl
+        row is not None and row.fetched_at is not None and datetime.now(UTC) - row.fetched_at < ttl
     )
     if fresh and not force_refresh:
         assert row is not None
         return {
             "profile": row.profile or {},
-            "income_annual": row.income_annual or {},
-            "income_quarterly": row.income_quarterly or {},
-            "balance_sheet": row.balance_sheet or {},
-            "cashflow": row.cashflow or {},
+            "income_annual": canonical_statement(row.income_annual),
+            "income_quarterly": canonical_statement(row.income_quarterly),
+            "balance_sheet": canonical_statement(row.balance_sheet),
+            "cashflow": canonical_statement(row.cashflow),
             "fetched_at": row.fetched_at.isoformat() if row.fetched_at else None,
             "source": "cache",
         }
@@ -215,10 +232,10 @@ async def get_fundamentals(
         if row is not None and row.profile:
             return {
                 "profile": row.profile or {},
-                "income_annual": row.income_annual or {},
-                "income_quarterly": row.income_quarterly or {},
-                "balance_sheet": row.balance_sheet or {},
-                "cashflow": row.cashflow or {},
+                "income_annual": canonical_statement(row.income_annual),
+                "income_quarterly": canonical_statement(row.income_quarterly),
+                "balance_sheet": canonical_statement(row.balance_sheet),
+                "cashflow": canonical_statement(row.cashflow),
                 "fetched_at": row.fetched_at.isoformat() if row.fetched_at else None,
                 "source": "stale-cache",
             }
@@ -227,19 +244,19 @@ async def get_fundamentals(
         if av_profile:
             return {
                 "profile": av_profile,
-                "income_annual": {},
-                "income_quarterly": {},
-                "balance_sheet": {},
-                "cashflow": {},
+                "income_annual": canonical_statement(None),
+                "income_quarterly": canonical_statement(None),
+                "balance_sheet": canonical_statement(None),
+                "cashflow": canonical_statement(None),
                 "fetched_at": None,
                 "source": "alpha_vantage",
             }
         return {
             "profile": await _db_profile(session, instrument),
-            "income_annual": {},
-            "income_quarterly": {},
-            "balance_sheet": {},
-            "cashflow": {},
+            "income_annual": canonical_statement(None),
+            "income_quarterly": canonical_statement(None),
+            "balance_sheet": canonical_statement(None),
+            "cashflow": canonical_statement(None),
             "fetched_at": None,
             "source": "db-only",
         }
@@ -280,9 +297,12 @@ async def _alpha_vantage_profile(provider_symbol: str) -> dict:
         value = bundle.data.get(av_key)
         if value in (None, "", "None", "-"):
             continue
-        profile[our_key] = _clean_number(value) if our_key != "longName" and our_key not in (
-            "longBusinessSummary", "sector", "industry", "currency"
-        ) else value
+        profile[our_key] = (
+            _clean_number(value)
+            if our_key != "longName"
+            and our_key not in ("longBusinessSummary", "sector", "industry", "currency")
+            else value
+        )
     return profile
 
 

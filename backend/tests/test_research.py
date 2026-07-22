@@ -7,7 +7,12 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-from app.services.research import _clean_number, derive_earnings, serialize_statement
+from app.services.research import (
+    _clean_number,
+    canonical_statement,
+    derive_earnings,
+    serialize_statement,
+)
 
 
 def _stmt_df() -> pd.DataFrame:
@@ -40,6 +45,23 @@ def test_serialize_statement_empty_and_none():
     assert serialize_statement(pd.DataFrame(), ("X",)) == {"periods": [], "rows": {}}
 
 
+def test_canonical_statement_normalizes_degraded_shapes():
+    # The exact payloads that crashed the frontend: bare {} / None from the
+    # db-only, alpha-vantage, and pre-normalization cache paths.
+    empty = {"periods": [], "rows": {}}
+    assert canonical_statement(None) == empty
+    assert canonical_statement({}) == empty
+    assert canonical_statement({"periods": None, "rows": None}) == empty
+    assert canonical_statement("junk") == empty
+    assert canonical_statement({"rows": {"Total Revenue": [1]}}) == {
+        "periods": [],
+        "rows": {"Total Revenue": [1]},
+    }
+    # Well-formed statements pass through unchanged.
+    good = {"periods": ["2026-03-31"], "rows": {"Total Revenue": [1000]}}
+    assert canonical_statement(good) == good
+
+
 def test_clean_number():
     assert _clean_number(float("nan")) is None
     assert _clean_number(float("inf")) is None
@@ -53,8 +75,12 @@ def _quarterly() -> dict:
     # Newest-first, 6 quarters. Revenue grows 10/qtr; NI flat then jump.
     return {
         "periods": [
-            "2026-06-30", "2026-03-31", "2025-12-31",
-            "2025-09-30", "2025-06-30", "2025-03-31",
+            "2026-06-30",
+            "2026-03-31",
+            "2025-12-31",
+            "2025-09-30",
+            "2025-06-30",
+            "2025-03-31",
         ],
         "rows": {
             "Total Revenue": [150, 140, 130, 120, 110, 100],

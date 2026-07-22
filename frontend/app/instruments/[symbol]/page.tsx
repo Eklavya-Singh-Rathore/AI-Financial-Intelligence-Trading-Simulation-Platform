@@ -8,7 +8,7 @@ import clsx from "clsx";
 import { TradingChart } from "@/components/chart/TradingChart";
 import { ResearchSection } from "@/components/ResearchSection";
 import { WatchlistStar } from "@/components/WatchlistStar";
-import { Button, Tooltip } from "@/components/ui";
+import { Button, ErrorBoundary, Tooltip } from "@/components/ui";
 import { api, fmtNum, fmtPct, polarity } from "@/lib/api";
 import { DEFAULT_INTERVAL, isIntradayInterval } from "@/lib/chartIntervals.mjs";
 import { INDICATOR_IDS, backendNames } from "@/lib/indicators";
@@ -144,6 +144,7 @@ export default function InstrumentPage() {
         </div>
       )}
 
+      <ErrorBoundary label="Chart">
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-3 text-sm">
           <label className="flex items-center gap-1.5 text-ink-2">
@@ -193,6 +194,7 @@ export default function InstrumentPage() {
           levels={srLevels}
         />
       </div>
+      </ErrorBoundary>
 
       <div className="rounded-lg border border-line p-4">
         <h2 className="mb-3 flex items-center gap-1.5 font-medium">
@@ -254,7 +256,9 @@ export default function InstrumentPage() {
         )}
       </div>
 
-      <ResearchSection symbol={symbol} />
+      <ErrorBoundary label="Research">
+        <ResearchSection symbol={symbol} />
+      </ErrorBoundary>
     </div>
   );
 }

@@ -17,3 +17,4 @@ export { Avatar } from "./Avatar";
 export { Progress } from "./Progress";
 export { Tooltip } from "./Tooltip";
 export { DropdownMenu, DropdownItem } from "./DropdownMenu";
+export { ErrorBoundary } from "./ErrorBoundary";

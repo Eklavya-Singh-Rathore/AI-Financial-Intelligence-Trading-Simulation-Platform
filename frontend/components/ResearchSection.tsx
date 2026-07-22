@@ -54,7 +54,12 @@ export function ResearchSection({ symbol }: { symbol: string }) {
   if (typeof p.beta === "number") facts.push(["Beta", p.beta.toFixed(2)]);
   if (typeof p.fullTimeEmployees === "number") facts.push(["Employees", fmtNum(p.fullTimeEmployees, 0)]);
 
+  // Degraded payloads (db-only / provider fallbacks) may lack periods/rows —
+  // treat anything missing as empty so bad data renders the empty state, never
+  // a crash.
   const stmt = financials.data?.data;
+  const periods = stmt?.periods ?? [];
+  const rows = stmt?.rows ?? {};
   const quarters = (earnings.data?.quarters ?? []).slice(0, 5);
 
   return (
@@ -167,27 +172,27 @@ export function ResearchSection({ symbol }: { symbol: string }) {
               )}
             </div>
             {financials.isLoading && <p className="text-xs text-ink-3">Loading statement…</p>}
-            {stmt && stmt.periods.length === 0 && (
+            {stmt && periods.length === 0 && (
               <p className="text-xs text-ink-3">
                 Statement data unavailable for this instrument (source: {financials.data?.source}).
               </p>
             )}
-            {stmt && stmt.periods.length > 0 && (
+            {periods.length > 0 && (
               <div className="overflow-x-auto">
                 <table className="w-full text-xs tabular">
                   <thead>
                     <tr className="text-left text-ink-3">
                       <th className="pb-1">LINE ITEM</th>
-                      {stmt.periods.map((per) => (
+                      {periods.map((per) => (
                         <th key={per} className="px-2 pb-1 text-right">{per}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {Object.entries(stmt.rows).map(([name, values]) => (
+                    {Object.entries(rows).map(([name, values]) => (
                       <tr key={name} className="border-t border-line">
                         <td className="py-1 pr-2">{name}</td>
-                        {values.map((v, i) => (
+                        {(Array.isArray(values) ? values : []).map((v, i) => (
                           <td key={i} className="px-2 text-right">{fmtCompact(v)}</td>
                         ))}
                       </tr>
