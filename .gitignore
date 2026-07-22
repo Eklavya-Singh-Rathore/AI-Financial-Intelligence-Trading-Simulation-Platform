@@ -29,15 +29,17 @@ hf_cache/
 *.ckpt
 *.pt
 
-# Node / frontend (Phase 3)
+# Node / frontend
 node_modules/
 .next/
 frontend/.env*
 !frontend/.env.example
 
-# Editors / OS
+# Editors / OS / assistant tooling
 .vscode/
 .idea/
+.claude/
+.impeccable/
 .DS_Store
 Thumbs.db
 
