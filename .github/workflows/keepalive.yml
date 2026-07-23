@@ -20,4 +20,9 @@ jobs:
     steps:
       - name: Ping backend /live
         if: ${{ vars.BACKEND_LIVE_URL != '' }}
-        run: curl -fsS -m 45 --retry 2 --retry-delay 5 "${{ vars.BACKEND_LIVE_URL }}" > /dev/null && echo "backend awake"
+        run: |
+          if curl -fsS -m 45 --retry 2 --retry-delay 5 "${{ vars.BACKEND_LIVE_URL }}" > /dev/null; then
+            echo "backend awake"
+          else
+            echo "::warning::Backend /live ping failed; continuing so keepalive workflow remains non-blocking."
+          fi
